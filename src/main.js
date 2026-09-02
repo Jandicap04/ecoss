@@ -10,7 +10,7 @@ document.querySelector('#app').innerHTML = `
     <section class="hud" aria-label="Estado de la partida">
       <div><span class="hud-label">TIEMPO</span><strong id="time">00.0</strong></div>
       <div class="hud-center"><span class="hud-label">RÉCORD</span><strong id="best">00.0</strong></div>
-      <div class="hud-right"><span class="hud-label">ECOs</span><strong id="echo-count">0</strong></div>
+      <div class="hud-right"><span class="hud-label">PODER · <span id="power-status">--</span></span><strong id="echo-count">0</strong></div>
     </section>
     <section class="skin-strip" aria-label="Skins desbloqueables">
       <div class="skin-title"><span class="hud-label">SKINS</span><strong id="currency">0⌁</strong></div>
@@ -39,6 +39,7 @@ const context = canvas.getContext('2d')
 const timeElement = document.querySelector('#time')
 const bestElement = document.querySelector('#best')
 const echoCountElement = document.querySelector('#echo-count')
+const powerStatusElement = document.querySelector('#power-status')
 const message = document.querySelector('#message')
 const powerPanel = document.querySelector('#power-panel')
 const powerGrid = document.querySelector('#power-grid')
@@ -82,6 +83,7 @@ let arena = { left: 20, top: 20, right: 0, bottom: 0 }
 let running = false
 let startTime = 0
 let lastFrame = 0
+let elapsedTime = 0
 let nextPatternAt = 10
 let nextDecoyAt = 1
 let best = Number(localStorage.getItem('echo-loop-best') || 0)
@@ -169,6 +171,7 @@ function startRun() {
   running = true
   startTime = performance.now()
   lastFrame = startTime
+  elapsedTime = 0
   nextPatternAt = 10
   nextDecoyAt = 1
   history = []
@@ -178,16 +181,19 @@ function startRun() {
   traps = []
   idleFor = 0
   activePower = null
+  powerStatusElement.textContent = '--'
   powerPanel.hidden = true
+  delete powerPanel.dataset.shown
   message.classList.add('hidden')
   requestAnimationFrame(frame)
 }
 
 function frame(now) {
   if (!running) return
-  const elapsed = (now - startTime) / 1000
   const delta = Math.min((now - lastFrame) / 1000, 0.05)
   lastFrame = now
+  elapsedTime += delta
+  const elapsed = elapsedTime
   update(elapsed, delta)
   draw(elapsed)
   requestAnimationFrame(frame)
@@ -457,7 +463,8 @@ function showPowerChoice() {
   powerGrid.innerHTML = powers.map((power) => `<button class="power-card" data-power="${power.id}"><span class="power-icon">${power.icon}</span><strong>${power.title}</strong><small>${power.text}</small></button>`).join('')
   powerGrid.querySelectorAll('.power-card').forEach((card) => card.addEventListener('click', () => {
     activePower = card.dataset.power
-    powerUntil = ((performance.now() - startTime) / 1000) + (activePower === 'slow' ? 3 : activePower === 'invert' ? 2 : 999)
+    powerStatusElement.textContent = powers.find((power) => power.id === activePower).title
+    powerUntil = elapsedTime + (activePower === 'slow' ? 3 : activePower === 'invert' ? 2 : 999)
     powerPanel.hidden = true
     delete powerPanel.dataset.shown
     running = true

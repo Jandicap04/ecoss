@@ -38,6 +38,7 @@ button { font: inherit; }
 .hud div { min-width: 90px; }
 .hud-center { text-align: center; }
 .hud-right { text-align: right; }
+.hud-right #power-status { display: inline-block; max-width: 96px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; white-space: nowrap; }
 .hud strong { display: block; margin-top: 3px; color: var(--ink); font: 500 22px 'DM Mono', monospace; }
 .skin-strip { display: flex; align-items: center; gap: 18px; min-height: 66px; margin-bottom: 16px; padding: 9px 12px; border: 1px solid var(--line); background: rgba(9, 22, 28, .72); }
 .skin-title { flex: 0 0 62px; }
