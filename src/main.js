@@ -86,6 +86,7 @@ let lastFrame = 0
 let elapsedTime = 0
 let nextPatternAt = 10
 let nextDecoyAt = 1
+let nextPowerAt = 20
 let best = Number(localStorage.getItem('echo-loop-best') || 0)
 let currency = Number(localStorage.getItem('echo-loop-currency') || 0)
 let unlockedSkins = JSON.parse(localStorage.getItem('echo-loop-skins') || '["retro"]')
@@ -174,6 +175,7 @@ function startRun() {
   elapsedTime = 0
   nextPatternAt = 10
   nextDecoyAt = 1
+  nextPowerAt = 20
   history = []
   echoes = []
   particles = []
@@ -196,7 +198,7 @@ function frame(now) {
   const elapsed = elapsedTime
   update(elapsed, delta)
   draw(elapsed)
-  requestAnimationFrame(frame)
+  if (running) requestAnimationFrame(frame)
 }
 
 function update(elapsed, delta) {
@@ -288,7 +290,7 @@ function update(elapsed, delta) {
   detectCollisions(elapsed)
   timeElement.textContent = elapsed.toFixed(1).padStart(4, '0')
 
-  if (elapsed >= 20 && Math.floor(elapsed) % 20 === 0 && Math.floor(elapsed * 10) % 10 === 0 && !powerPanel.dataset.shown) showPowerChoice()
+  if (elapsed >= nextPowerAt && !powerPanel.dataset.shown) showPowerChoice()
 }
 
 function detectCollisions(elapsed) {
@@ -458,6 +460,7 @@ function endRun(elapsed, reason = 'Tu pasado te encontró.') {
 
 function showPowerChoice() {
   running = false
+  nextPowerAt += 20
   powerPanel.dataset.shown = 'true'
   powerPanel.hidden = false
   powerGrid.innerHTML = powers.map((power) => `<button class="power-card" data-power="${power.id}"><span class="power-icon">${power.icon}</span><strong>${power.title}</strong><small>${power.text}</small></button>`).join('')
