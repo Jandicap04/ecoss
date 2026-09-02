@@ -93,6 +93,7 @@ let unlockedSkins = JSON.parse(localStorage.getItem('echo-loop-skins') || '["ret
 let selectedSkin = localStorage.getItem('echo-loop-selected-skin') || 'retro'
 let activePower = null
 let powerUntil = 0
+let powerGraceUntil = 0
 
 bestElement.textContent = best.toFixed(1).padStart(4, '0')
 updateSkinStore()
@@ -183,6 +184,7 @@ function startRun() {
   traps = []
   idleFor = 0
   activePower = null
+  powerGraceUntil = 0
   powerStatusElement.textContent = '--'
   powerPanel.hidden = true
   delete powerPanel.dataset.shown
@@ -294,6 +296,7 @@ function update(elapsed, delta) {
 }
 
 function detectCollisions(elapsed) {
+  if (elapsed < powerGraceUntil) return
   for (const trap of traps) {
     if (Math.hypot(player.x - trap.x, player.y - trap.y) < trap.radius + playerRadius) {
       burst(player.x, player.y, '#ff8a65', elapsed)
@@ -468,6 +471,7 @@ function showPowerChoice() {
     activePower = card.dataset.power
     powerStatusElement.textContent = powers.find((power) => power.id === activePower).title
     powerUntil = elapsedTime + (activePower === 'slow' ? 3 : activePower === 'invert' ? 2 : 999)
+    powerGraceUntil = elapsedTime + 1.5
     powerPanel.hidden = true
     delete powerPanel.dataset.shown
     running = true
