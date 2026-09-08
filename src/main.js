@@ -111,6 +111,8 @@ let onlineSelectedTrap = 'bird-net'
 let onlineSetupTraps = []
 let onlineSetupTimer = null
 let onlineSetupDraw = null
+let onlineSetupReady = false
+let remoteSetupReady = false
 let onlinePlayerAlive = true
 let onlineOpponentAlive = true
 let onlineMatchEnded = false
@@ -122,12 +124,7 @@ function handleOnlinePresence(state) {
   onlinePeers.set(state.id, { id: state.id, name: state.name || 'RIVAL', lastSeen: performance.now() })
   updateOnlinePlayersDisplay()
   if (onlineLobbyActive && !onlineMode) {
-    onlineLobbyActive = false
-    if (presenceInterval) clearInterval(presenceInterval)
-    onlineMode = true
-    onlineMatchActive = true
-    onlineCountdown = 60
-    startRun()
+    updatePeerRoomDisplay('RIVAL ENCONTRADO · CONECTANDO')
   }
 }
 
@@ -189,6 +186,8 @@ function startPeerMatch() {
 
 function showOnlineTrapSetup() {
   onlineSetupActive = true
+  onlineSetupReady = false
+  remoteSetupReady = false
   onlineSetupTraps = []
   const setupPanel = document.querySelector('#online-setup')
   if (setupPanel) setupPanel.hidden = false
@@ -201,13 +200,39 @@ function showOnlineTrapSetup() {
   onlineSetupTimer = setInterval(() => {
     remaining -= 1
     if (countdown) countdown.textContent = remaining
-    if (remaining <= 0) beginOnlineMatch()
+    if (remaining <= 0) confirmOnlineSetup()
   }, 1000)
-  startButton?.addEventListener('click', beginOnlineMatch, { once: true })
+  startButton?.addEventListener('click', confirmOnlineSetup, { once: true })
   document.querySelectorAll('[data-trap-choice]').forEach((button) => button.addEventListener('click', () => {
     onlineSelectedTrap = button.dataset.trapChoice
     document.querySelectorAll('[data-trap-choice]').forEach((item) => item.classList.toggle('selected', item === button))
   }))
+}
+
+function updateSetupReadyDisplay() {
+  const status = document.querySelector('#online-connection-status')
+  if (!status || !onlineSetupActive) return
+  if (onlineSetupReady && remoteSetupReady) status.textContent = 'AMBOS LISTOS · INICIANDO'
+  else if (onlineSetupReady) status.textContent = 'LISTO · ESPERANDO AL RIVAL'
+  else if (remoteSetupReady) status.textContent = 'EL RIVAL YA ESTA LISTO'
+  else status.textContent = 'COLOCA TRAMPAS Y PULSA EMPEZAR'
+}
+
+function confirmOnlineSetup() {
+  if (!onlineSetupActive || onlineSetupReady) return
+  onlineSetupReady = true
+  if (!onlineSetupTraps.length) {
+    onlineSetupTraps = [
+      { type: 'bird-net', x: width * .25, y: height * .35, radius: 34, born: 0, active: true, laserAngle: 0 },
+      { type: 'wolf-laser', x: width * .7, y: height * .55, radius: 26, born: 0, active: true, laserAngle: .4 },
+      { type: 'axe', x: width * .45, y: height * .72, radius: 26, born: 0, active: true, laserAngle: 0 },
+    ]
+  }
+  const setupMessage = { type: 'setup-state', ready: true, traps: onlineSetupTraps }
+  if (peerConnection?.open) peerConnection.send(setupMessage)
+  if (onlineChannel) onlineChannel.postMessage({ ...setupMessage, id: localPlayerId })
+  updateSetupReadyDisplay()
+  if (remoteSetupReady) beginOnlineMatch()
 }
 
 function placeOnlineTrap(event) {
@@ -222,6 +247,7 @@ function placeOnlineTrap(event) {
 function beginOnlineMatch() {
   if (!onlineSetupActive) return
   onlineSetupActive = false
+  onlineSetupReady = true
   if (onlineSetupTimer) clearInterval(onlineSetupTimer)
   if (!onlineSetupTraps.length) {
     onlineSetupTraps = [
@@ -248,6 +274,13 @@ function attachPeerConnection(connection, name) {
     startPeerMatch()
   })
   connection.on('data', (message) => {
+    if (message?.type === 'setup-state') {
+      remoteSetupReady = message.ready === true
+      if (Array.isArray(message.traps)) remoteTraps = message.traps
+      updateSetupReadyDisplay()
+      if (onlineSetupReady && remoteSetupReady) beginOnlineMatch()
+      return
+    }
     if (!message || message.type !== 'player-state') return
     opponent = { id: connection.peer, name: message.name || 'RIVAL', skin: message.skin || 'retro', x: message.x, y: message.y, elapsed: message.elapsed || 0, lastSeen: performance.now() }
     if (Array.isArray(message.traps)) remoteTraps = message.traps
@@ -780,7 +813,7 @@ function updateSkinStore() {
     const unlocked = unlockedSkins.includes(skin.id)
     const selected = selectedSkin === skin.id
     const label = selected ? 'USANDO' : unlocked ? 'ELEGIR' : `${skin.price}⌁`
-    return `<button class="skin-chip ${selected ? 'selected' : ''}" data-skin="${skin.id}" style="--skin-core:${skin.core};--skin-edge:${skin.edge}" title="${skin.name} · ${skin.role}"><span class="skin-orb"></span><span>${skin.name}</span><small>${label}</small></button>`
+    return `<button class="skin-chip ${selected ? 'selected' : ''}" data-skin="${skin.id}" data-character="${skin.character}" style="--skin-core:${skin.core};--skin-edge:${skin.edge}" title="${skin.name} · ${skin.role}"><span class="skin-orb"><i></i></span><span>${skin.name}</span><small>${label}</small></button>`
   }).join('')
   skinList.querySelectorAll('.skin-chip').forEach((button) => button.addEventListener('click', () => {
     const skin = skins.find((item) => item.id === button.dataset.skin)

@@ -382,9 +382,18 @@ button { font: inherit; }
 .skin-title { flex: 0 0 62px; }
 .skin-title strong { display: block; margin-top: 3px; color: var(--acid); font: 500 13px 'DM Mono', monospace; }
 .skin-list { display: flex; gap: 7px; min-width: 0; overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; flex: 1; }
-.skin-chip { flex: 0 0 84px; display: grid; grid-template-columns: 22px 1fr; grid-template-rows: 1fr 1fr; gap: 0 6px; align-items: center; padding: 5px 7px; border: 1px solid transparent; color: var(--muted); background: transparent; cursor: pointer; text-align: left; }
+.skin-chip { flex: 0 0 104px; display: grid; grid-template-columns: 30px 1fr; grid-template-rows: 1fr 1fr; gap: 0 7px; align-items: center; padding: 5px 7px; border: 1px solid transparent; color: var(--muted); background: transparent; cursor: pointer; text-align: left; }
 .skin-chip:hover, .skin-chip.selected { border-color: var(--skin-edge); color: var(--ink); background: rgba(255, 255, 255, .05); }
-.skin-orb { grid-row: span 2; width: 20px; height: 20px; border: 2px solid var(--skin-edge); border-radius: 50%; background: radial-gradient(circle at 35% 30%, var(--skin-edge), var(--skin-core) 55%, #071015 100%); box-shadow: 0 0 8px var(--skin-core); }
+.skin-orb { position: relative; grid-row: span 2; width: 28px; height: 31px; border: 2px solid #050b0f; border-radius: 9px 9px 5px 5px; background: linear-gradient(90deg, var(--skin-core) 0 22%, var(--skin-edge) 22% 78%, var(--skin-core) 78%); box-shadow: 0 0 10px color-mix(in srgb, var(--skin-core) 65%, transparent); transform: translateY(2px); }
+.skin-orb::before { content: ''; position: absolute; left: 5px; top: -8px; width: 14px; height: 12px; border: 2px solid #050b0f; border-radius: 7px 7px 4px 4px; background: var(--skin-edge); }
+.skin-orb::after { content: ''; position: absolute; left: 8px; top: -3px; width: 3px; height: 3px; border-radius: 50%; background: #18212a; box-shadow: 8px 0 #18212a; }
+.skin-orb i { position: absolute; left: 3px; right: 3px; bottom: 5px; height: 3px; border-radius: 3px; background: var(--skin-edge); }
+.skin-chip[data-character='engineer'] .skin-orb::before, .skin-chip[data-character='speed'] .skin-orb::before, .skin-chip[data-character='robot'] .skin-orb::before { left: 2px; top: -10px; width: 20px; height: 5px; border-radius: 3px; background: var(--skin-edge); }
+.skin-chip[data-character='wolf'] .skin-orb::before { border-radius: 2px 2px 8px 8px; transform: skewY(-8deg); }
+.skin-chip[data-character='zombie'] .skin-orb::before, .skin-chip[data-character='toxic'] .skin-orb::before { background: #78b34d; }
+.skin-chip[data-character='bird'] .skin-orb::after { border-radius: 0; width: 10px; height: 4px; background: var(--skin-edge); box-shadow: 7px 0 var(--skin-edge); transform: rotate(-20deg); }
+.skin-chip[data-character='axe'] .skin-orb i, .skin-chip[data-character='samurai'] .skin-orb i { height: 15px; width: 3px; left: auto; right: -5px; bottom: 4px; transform: rotate(35deg); }
+.skin-chip[data-character='boss'] .skin-orb::before, .skin-chip[data-character='commander'] .skin-orb::before { border-radius: 2px; }
 .skin-chip span:not(.skin-orb) { overflow: hidden; font: 9px 'DM Mono', monospace; letter-spacing: .3px; text-overflow: ellipsis; }
 .skin-chip small { color: var(--skin-edge); font: 8px 'DM Mono', monospace; }
 .game-wrap { position: relative; height: min(74svh, 760px); min-height: 480px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 18px 70px rgba(0, 0, 0, .3); }
