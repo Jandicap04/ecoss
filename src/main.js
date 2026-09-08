@@ -1,5 +1,24 @@
 import './style.css'
 import Peer from 'peerjs'
+import pixelSheetUrl from './assets/IMAGENES.png'
+
+const pixelSheet = new Image()
+pixelSheet.src = pixelSheetUrl
+const pixelSpriteRects = [
+  { x: 32, y: 10, width: 72, height: 108 },
+  { x: 100, y: 10, width: 72, height: 108 },
+  { x: 168, y: 10, width: 72, height: 108 },
+  { x: 236, y: 10, width: 72, height: 108 },
+  { x: 32, y: 138, width: 72, height: 112 },
+  { x: 102, y: 138, width: 72, height: 112 },
+  { x: 172, y: 138, width: 72, height: 112 },
+  { x: 242, y: 138, width: 72, height: 112 },
+  { x: 32, y: 274, width: 72, height: 116 },
+  { x: 102, y: 274, width: 72, height: 116 },
+  { x: 172, y: 274, width: 72, height: 116 },
+  { x: 242, y: 274, width: 72, height: 116 },
+]
+const pixelSpriteCache = new Map()
 
 document.querySelector('#app').innerHTML = `
   <main class="shell">
@@ -1624,6 +1643,33 @@ function drawTrapCharacter(x, y, character, elapsed, opacity = 1) {
 }
 
 function drawPixelCharacter(x, y, skin, ghost) {
+  const spriteRect = pixelSpriteRects[skin.pixelStyle]
+  if (pixelSheet.complete && pixelSheet.naturalWidth && spriteRect) {
+    let sprite = pixelSpriteCache.get(skin.pixelStyle)
+    if (!sprite) {
+      sprite = document.createElement('canvas')
+      sprite.width = spriteRect.width
+      sprite.height = spriteRect.height
+      const spriteContext = sprite.getContext('2d')
+      spriteContext.drawImage(pixelSheet, spriteRect.x, spriteRect.y, spriteRect.width, spriteRect.height, 0, 0, spriteRect.width, spriteRect.height)
+      const pixels = spriteContext.getImageData(0, 0, sprite.width, sprite.height)
+      for (let index = 0; index < pixels.data.length; index += 4) {
+        const red = pixels.data[index]
+        const green = pixels.data[index + 1]
+        const blue = pixels.data[index + 2]
+        if (Math.max(red, green, blue) - Math.min(red, green, blue) < 4 && red > 135 && red < 225) pixels.data[index + 3] = 0
+      }
+      spriteContext.putImageData(pixels, 0, 0)
+      pixelSpriteCache.set(skin.pixelStyle, sprite)
+    }
+    const scale = ghost ? 0.48 : 0.58
+    context.save()
+    context.globalAlpha = ghost ? 0.62 : 1
+    context.imageSmoothingEnabled = false
+    context.drawImage(sprite, x - sprite.width * scale / 2, y - sprite.height * scale / 2, sprite.width * scale, sprite.height * scale)
+    context.restore()
+    return
+  }
   const scale = ghost ? 1.7 : 2.1
   const pixel = (offsetX, offsetY, pixelWidth, pixelHeight, color) => {
     context.fillStyle = color
