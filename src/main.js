@@ -348,14 +348,23 @@ function attachPeerConnection(connection, name) {
 
 function createPeerRoom(name) {
   if (peer) peer.destroy()
-  peer = new Peer(undefined, { debug: 0 })
-  peer.on('open', (id) => {
-    peerRoomCode = id
+  peerRoomCode = createRoomCode()
+  peer = new Peer(peerRoomCode, { debug: 0 })
+  peer.on('open', () => {
     updatePeerRoomDisplay('COMPARTE ESTE CÓDIGO')
     broadcastPresence(name)
   })
   peer.on('connection', (connection) => attachPeerConnection(connection, name))
   peer.on('error', () => updatePeerRoomDisplay('NO SE PUDO CREAR LA SALA'))
+}
+
+function createRoomCode() {
+  const alphabet = 'abcdefghijkmnopqrstuvwxyz23456789-'
+  let code = ''
+  for (let index = 0; index < 6; index += 1) {
+    code += alphabet[Math.floor(Math.random() * alphabet.length)]
+  }
+  return code
 }
 
 function joinPeerRoom(name, roomCode) {
