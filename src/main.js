@@ -866,6 +866,8 @@ playOnlineButton.addEventListener('click', () => {
   nicknameInput.focus()
 })
 
+document.querySelector('#sim-button')?.addEventListener('click', () => playOnlineButton.click())
+
 nicknameForm.addEventListener('submit', (event) => {
   event.preventDefault()
   const name = nicknameInput.value.trim().replace(/\s+/g, ' ').slice(0, 16)
@@ -1077,7 +1079,7 @@ function startRun() {
   remoteTraps = []
   idleFor = 0
   activePower = null
-  powerGraceUntil = 0
+  powerGraceUntil = 3
   onlineBoosted = false
   onlineLastEliminationAt = 0
   powerStatusElement.textContent = '--'
