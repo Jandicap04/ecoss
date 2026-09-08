@@ -62,8 +62,8 @@ document.querySelector('#app').innerHTML = `
   </main>
 `
 
-const canvas = document.querySelector('#game')
-const context = canvas.getContext('2d')
+let canvas = document.querySelector('#game')
+let context = canvas.getContext('2d')
 const timeElement = document.querySelector('#time')
 const bestElement = document.querySelector('#best')
 const echoCountElement = document.querySelector('#echo-count')
@@ -87,12 +87,70 @@ let onlineMatchActive = false
 let onlineCountdown = 60
 let onlineRoom = null
 let onlineMode = false
+let localPlayerId = sessionStorage.getItem('echo-loop-player-id') || ''
+let opponent = null
+let lastOnlineBroadcast = 0
+let onlinePeers = new Map()
+let onlineLobbyActive = false
+let presenceInterval = null
+const onlineChannel = 'BroadcastChannel' in window ? new BroadcastChannel('echo-loop-live-arena') : null
+const presenceKeyPrefix = 'echo-loop-online-player-'
+
+function handleOnlinePresence(state) {
+  if (!state || state.id === localPlayerId) return
+  onlinePeers.set(state.id, { id: state.id, name: state.name || 'RIVAL', lastSeen: performance.now() })
+  updateOnlinePlayersDisplay()
+  if (onlineLobbyActive && !onlineMode) {
+    onlineLobbyActive = false
+    if (presenceInterval) clearInterval(presenceInterval)
+    onlineMode = true
+    onlineMatchActive = true
+    onlineCountdown = 60
+    startRun()
+  }
+}
+
+if (onlineChannel) {
+  onlineChannel.addEventListener('message', (event) => {
+    const state = event.data
+    if (!state || state.id === localPlayerId) return
+    if (state.type === 'player-presence') {
+      handleOnlinePresence(state)
+      return
+    }
+    if (state.type !== 'player-state') return
+    opponent = { id: state.id, name: state.name || 'RIVAL', x: state.x, y: state.y, lastSeen: performance.now() }
+  })
+}
+
+function broadcastPresence(name) {
+  const state = { type: 'player-presence', id: localPlayerId, name, seenAt: Date.now() }
+  localStorage.setItem(`${presenceKeyPrefix}${localPlayerId}`, JSON.stringify(state))
+  if (onlineChannel) onlineChannel.postMessage(state)
+}
+
+window.addEventListener('storage', (event) => {
+  if (!event.key || !event.key.startsWith(presenceKeyPrefix) || !event.newValue) return
+  try {
+    handleOnlinePresence(JSON.parse(event.newValue))
+  } catch {
+    return
+  }
+})
+
+function updateOnlinePlayersDisplay() {
+  const list = document.querySelector('#online-players')
+  if (!list) return
+  const currentName = localStorage.getItem('echo-loop-player-name') || 'JUGADOR'
+  const players = [{ name: currentName, label: 'JUGADOR 1' }, ...Array.from(onlinePeers.values()).map((peer) => ({ name: peer.name, label: 'JUGADOR 2' }))]
+  list.innerHTML = players.slice(0, 2).map((player) => `<div class="online-player"><span class="player-status"></span><strong>${escapeHtml(player.name)}</strong><small>${player.label}</small></div>`).join('')
+}
 
 function getOnlineRoomState() {
   try {
     const stored = JSON.parse(localStorage.getItem('echo-loop-online-room') || '{"players":[],"updatedAt":0}')
     return {
-      players: Array.isArray(stored.players) ? stored.players.map((player) => typeof player === 'string' ? { id: player, name: 'RIVAL' } : player).filter((player) => player && player.id) : [],
+      players: Array.isArray(stored.players) ? stored.players.map((player) => typeof player === 'string' ? { id: player, name: 'RIVAL', seenAt: 0 } : player).filter((player) => player && player.id) : [],
       updatedAt: Number(stored.updatedAt || 0),
       startedAt: Number(stored.startedAt || 0),
     }
@@ -107,11 +165,14 @@ function escapeHtml(value) {
 
 function registerOnlinePlayer(name) {
   const room = getOnlineRoomState()
-  const playerId = localStorage.getItem('echo-loop-player-id') || `player-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  localStorage.setItem('echo-loop-player-id', playerId)
+  const playerId = sessionStorage.getItem('echo-loop-player-id') || `player-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  localPlayerId = playerId
+  sessionStorage.setItem('echo-loop-player-id', playerId)
   localStorage.setItem('echo-loop-player-name', name)
-  const players = [...(room.players || []).filter((player) => player.id !== playerId), { id: playerId, name }].slice(-2)
-  const nextRoom = { players, updatedAt: Date.now(), startedAt: players.length >= 2 ? Date.now() + 60000 : 0 }
+  const now = Date.now()
+  const activePlayers = (room.players || []).filter((player) => player.id === playerId || now - Number(player.seenAt || 0) < 10000)
+  const players = [...activePlayers.filter((player) => player.id !== playerId), { id: playerId, name, seenAt: now }].slice(-2)
+  const nextRoom = { players, updatedAt: now, startedAt: players.length >= 2 ? room.startedAt || now + 60000 : 0 }
   localStorage.setItem('echo-loop-online-room', JSON.stringify(nextRoom))
   return nextRoom
 }
@@ -144,33 +205,62 @@ function renderOnlineWaitingState(name) {
     </main>
   `
 
-  const canvas = document.querySelector('#game')
-  if (canvas) {
-    const context = canvas.getContext('2d')
+  const waitingCanvas = document.querySelector('#game')
+  window.requestAnimationFrame(() => {
+    canvas = document.querySelector('#game')
+    context = canvas ? canvas.getContext('2d') : context
+    bindCanvasControls()
+  })
+  if (waitingCanvas) {
+    const waitingContext = waitingCanvas.getContext('2d')
     const drawWaiting = () => {
-      const width = canvas.clientWidth || 900
-      const height = canvas.clientHeight || 420
-      canvas.width = width * (window.devicePixelRatio || 1)
-      canvas.height = height * (window.devicePixelRatio || 1)
-      context.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0)
-      context.clearRect(0, 0, width, height)
-      const gradient = context.createLinearGradient(0, 0, width, height)
+      const width = waitingCanvas.clientWidth || 900
+      const height = waitingCanvas.clientHeight || 420
+      waitingCanvas.width = width * (window.devicePixelRatio || 1)
+      waitingCanvas.height = height * (window.devicePixelRatio || 1)
+      waitingContext.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0)
+      waitingContext.clearRect(0, 0, width, height)
+      const gradient = waitingContext.createLinearGradient(0, 0, width, height)
       gradient.addColorStop(0, '#0a1621')
       gradient.addColorStop(1, '#040b11')
-      context.fillStyle = gradient
-      context.fillRect(0, 0, width, height)
-      context.fillStyle = '#d7ff63'
-      context.font = "700 22px 'DM Mono', monospace"
-      context.textAlign = 'center'
-      context.fillText('RIVAL EN BUSCA...', width / 2, height / 2)
+      waitingContext.fillStyle = gradient
+      waitingContext.fillRect(0, 0, width, height)
+      waitingContext.fillStyle = '#d7ff63'
+      waitingContext.font = "700 22px 'DM Mono', monospace"
+      waitingContext.textAlign = 'center'
+      waitingContext.fillText('RIVAL EN BUSCA...', width / 2, height / 2)
     }
     drawWaiting()
   }
 
   const timerLabel = document.querySelector('#online-timer')
+  onlineLobbyActive = true
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index)
+    if (!key || !key.startsWith(presenceKeyPrefix)) continue
+    try {
+      const state = JSON.parse(localStorage.getItem(key))
+      if (Date.now() - Number(state.seenAt || 0) < 10000) handleOnlinePresence(state)
+    } catch {
+      continue
+    }
+  }
+  broadcastPresence(playerName)
+  if (presenceInterval) clearInterval(presenceInterval)
+  presenceInterval = setInterval(() => broadcastPresence(playerName), 1000)
+  updateOnlinePlayersDisplay()
+  if (onlineChannel && onlinePeers.size > 0) {
+    onlineLobbyActive = false
+    clearInterval(presenceInterval)
+    onlineMode = true
+    onlineMatchActive = true
+    onlineCountdown = 60
+    startRun()
+    return
+  }
   const interval = setInterval(() => {
-    const state = getOnlineRoomState()
-    const playersReady = state.players.length >= 2
+    const state = registerOnlinePlayer(playerName)
+    const playersReady = onlineChannel ? onlinePeers.size >= 1 : state.players.length >= 2
     if (playersReady) {
       const remaining = Math.max(0, Math.ceil((state.startedAt - Date.now()) / 1000))
       if (timerLabel) timerLabel.textContent = remaining
@@ -189,7 +279,7 @@ function renderOnlineWaitingState(name) {
   window.addEventListener('storage', (event) => {
     if (event.key === 'echo-loop-online-room') {
       const roomState = getOnlineRoomState()
-      if (roomState.players.length >= 2) {
+      if (!onlineChannel && roomState.players.length >= 2) {
         clearInterval(interval)
         onlineMode = true
         onlineMatchActive = true
@@ -202,7 +292,7 @@ function renderOnlineWaitingState(name) {
 
 function startOnlineArena(name) {
   const room = registerOnlinePlayer(name || localStorage.getItem('echo-loop-player-name') || 'JUGADOR')
-  if (room.players.length >= 2) {
+  if (!onlineChannel && room.players.length >= 2) {
     onlineMode = true
     onlineCountdown = 60
     onlineMatchActive = true
@@ -530,8 +620,8 @@ function resize() {
   canvas.width = width * ratio
   canvas.height = height * ratio
   context.setTransform(ratio, 0, 0, ratio, 0, 0)
-  arena.right = width - 20
-  arena.bottom = height - 20
+  arena.right = width - 10
+  arena.bottom = height - 10
   if (!running) {
     player.x = width / 2
     player.y = height / 2
@@ -542,11 +632,11 @@ function resize() {
 
 function randomizeArena() {
   const shapes = [
-    { width: 0.92, height: 0.52 },
-    { width: 0.58, height: 0.86 },
-    { width: 0.68, height: 0.62 },
-    { width: 0.82, height: 0.72 },
-    { width: 0.48, height: 0.58 },
+    { width: 0.98, height: 0.88 },
+    { width: 0.9, height: 0.98 },
+    { width: 0.94, height: 0.9 },
+    { width: 0.98, height: 0.96 },
+    { width: 0.86, height: 0.92 },
   ]
   const shape = shapes[Math.floor(Math.random() * shapes.length)]
   const playableWidth = Math.max(190, width * shape.width)
@@ -640,6 +730,10 @@ function update(elapsed, delta) {
   const previousY = player.y
   player.x += (player.targetX - player.x) * smoothing
   player.y += (player.targetY - player.y) * smoothing
+  if (onlineMode && onlineChannel && performance.now() - lastOnlineBroadcast > 50) {
+    onlineChannel.postMessage({ type: 'player-state', id: localPlayerId, name: localStorage.getItem('echo-loop-player-name') || 'JUGADOR', x: player.x, y: player.y })
+    lastOnlineBroadcast = performance.now()
+  }
   if (Math.hypot(player.x - previousX, player.y - previousY) < 0.45) idleFor += delta
   else idleFor = 0
   if (idleFor >= 3) {
@@ -823,6 +917,13 @@ function draw(elapsed) {
   context.globalAlpha = 1
   echoes.forEach((echo) => drawCircle(echo.x, echo.y, 9, echo.color, true))
   particles.forEach((particle) => drawCircle(particle.x, particle.y, 2, particle.color, false))
+  if (onlineMode && opponent && performance.now() - opponent.lastSeen < 3000) {
+    drawCircle(opponent.x, opponent.y, playerRadius + 1, '#ff8a65', false)
+    context.fillStyle = '#ffcfbf'
+    context.font = '10px DM Mono, monospace'
+    context.textAlign = 'center'
+    context.fillText(opponent.name, opponent.x, opponent.y - 18)
+  }
   drawPlayer(elapsed)
   context.beginPath(); context.arc(player.x, player.y, 19 + Math.sin(elapsed * 5) * 2, 0, Math.PI * 2)
   context.strokeStyle = 'rgba(215, 255, 99, 0.45)'; context.stroke()
@@ -963,14 +1064,20 @@ function showPowerChoice() {
   }, { once: true }))
 }
 
+function bindCanvasControls() {
+  if (!canvas || canvas.dataset.controlsBound === 'true') return
+  canvas.addEventListener('pointermove', pointerMove)
+  canvas.addEventListener('pointerdown', pointerMove)
+  canvas.addEventListener('touchmove', pointerMove, { passive: true })
+  canvas.dataset.controlsBound = 'true'
+}
+
 startButton.addEventListener('click', startRun)
 soundButton.addEventListener('click', () => {
   const muted = soundButton.textContent === '◒'
   soundButton.textContent = muted ? '◐' : '◒'
   soundButton.setAttribute('aria-label', muted ? 'Silenciar sonido' : 'Activar sonido')
 })
-canvas.addEventListener('pointermove', pointerMove)
-canvas.addEventListener('pointerdown', pointerMove)
-canvas.addEventListener('touchmove', pointerMove, { passive: true })
+bindCanvasControls()
 window.addEventListener('resize', resize)
 resize()
