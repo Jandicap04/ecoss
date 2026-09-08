@@ -194,7 +194,7 @@ if (onlineChannel) {
       return
     }
     if (state.type !== 'player-state') return
-    opponent = { id: state.id, name: state.name || 'RIVAL', skin: state.skin || 'retro', x: state.x, y: state.y, elapsed: state.elapsed || 0, lives: state.lives ?? 2, lastSeen: performance.now() }
+    opponent = { id: state.id, name: state.name || 'RIVAL', skin: state.skin || 'pixel-red', x: state.x, y: state.y, elapsed: state.elapsed || 0, lives: state.lives ?? 2, lastSeen: performance.now() }
     opponentLives = opponent.lives
   })
 }
@@ -469,7 +469,7 @@ function attachPeerConnection(connection, name) {
       return
     }
     if (!message || message.type !== 'player-state') return
-    opponent = { id: connection.peer, name: message.name || 'RIVAL', skin: message.skin || 'retro', x: message.x, y: message.y, elapsed: message.elapsed || 0, lives: message.lives ?? 2, lastSeen: performance.now() }
+    opponent = { id: connection.peer, name: message.name || 'RIVAL', skin: message.skin || 'pixel-red', x: message.x, y: message.y, elapsed: message.elapsed || 0, lives: message.lives ?? 2, lastSeen: performance.now() }
     opponentLives = opponent.lives
     if (Array.isArray(message.traps)) remoteTraps = message.traps
     onlinePeers.set(connection.peer, { id: connection.peer, name: opponent.name, lastSeen: performance.now() })
@@ -980,26 +980,6 @@ const powers = [
   { id: 'invert', title: 'ESPEJO ROTO', text: 'Los ecos invierten su dirección durante 2 segundos.', icon: '↔' },
 ]
 const skins = [
-  { id: 'retro', name: 'SCOUT', price: 0, core: '#20a4ff', edge: '#b8e9ff', role: 'EXPLORADOR', character: 'scout' },
-  { id: 'plasma', name: 'ENGINEER', price: 20, core: '#a855f7', edge: '#f0abfc', role: 'CASCO NARANJA', character: 'engineer' },
-  { id: 'candy', name: 'BIRD', price: 40, core: '#f472b6', edge: '#ffe4f3', role: 'TRAMPAS AEREAS', character: 'bird' },
-  { id: 'matrix', name: 'RANGER', price: 70, core: '#52d11c', edge: '#d4ff7c', role: 'RASTREADOR', character: 'ranger' },
-  { id: 'glitch', name: 'AXE', price: 100, core: '#f43f5e', edge: '#22d3ee', role: 'LANZA HACHA', character: 'axe' },
-  { id: 'void', name: 'ZOMBIE', price: 140, core: '#241238', edge: '#c084fc', role: 'ECO DEL PASADO', character: 'zombie' },
-  { id: 'laser', name: 'WOLF', price: 190, core: '#e11d48', edge: '#fb7185', role: 'LASER INICIAL', character: 'wolf' },
-  { id: 'gold', name: 'COMMANDER', price: 250, core: '#e19b18', edge: '#fff0a8', role: 'GUERRERO', character: 'commander' },
-  { id: 'nebula', name: 'NINJA', price: 320, core: '#5b21b6', edge: '#e9d5ff', role: 'ECO OSCURO', character: 'ninja' },
-  { id: 'firewall', name: 'MEDIC', price: 400, core: '#ea580c', edge: '#fed7aa', role: 'RESISTENCIA', character: 'medic' },
-  { id: 'frost', name: 'SPEED', price: 500, core: '#0ea5e9', edge: '#dff8ff', role: 'SUPER VELOCIDAD', character: 'speed' },
-  { id: 'toxic', name: 'TOXIC', price: 650, core: '#3f9d16', edge: '#b8ff5b', role: 'ZOMBI TOXICO', character: 'toxic' },
-  { id: 'sniper', name: 'SNIPER', price: 800, core: '#64748b', edge: '#dbeafe', role: 'ECO A DISTANCIA', character: 'sniper' },
-  { id: 'heavy', name: 'HEAVY', price: 950, core: '#334155', edge: '#94a3b8', role: 'ARMADURA PESADA', character: 'heavy' },
-  { id: 'pilot', name: 'PILOT', price: 1100, core: '#0f766e', edge: '#99f6e4', role: 'MOVILIDAD AEREA', character: 'pilot' },
-  { id: 'samurai', name: 'SAMURAI', price: 1300, core: '#991b1b', edge: '#fecaca', role: 'CORTE RAPIDO', character: 'samurai' },
-  { id: 'robot', name: 'ROBOT', price: 1500, core: '#475569', edge: '#67e8f9', role: 'ESCUDO MECANICO', character: 'robot' },
-  { id: 'commando', name: 'COMMANDO', price: 1800, core: '#365314', edge: '#bef264', role: 'CAZADOR ELITE', character: 'commando' },
-  { id: 'shadow', name: 'SHADOW', price: 2200, core: '#18181b', edge: '#a1a1aa', role: 'ECO INVISIBLE', character: 'shadow' },
-  { id: 'boss', name: 'BOSS', price: 2800, core: '#7f1d1d', edge: '#fbbf24', role: 'JEFE FINAL', character: 'boss' },
   { id: 'pixel-red', name: 'PIXEL RED', price: 10, core: '#b9362f', edge: '#f6b24b', role: 'GUERRERO PIXEL', character: 'pixel', pixelStyle: 0 },
   { id: 'pixel-agent', name: 'PIXEL AGENT', price: 20, core: '#303b49', edge: '#e5a26f', role: 'AGENTE PIXEL', character: 'pixel', pixelStyle: 1 },
   { id: 'pixel-cyan', name: 'PIXEL CYAN', price: 30, core: '#2b7890', edge: '#bce8ee', role: 'TECNICO PIXEL', character: 'pixel', pixelStyle: 2 },
@@ -1012,7 +992,22 @@ const skins = [
   { id: 'pixel-tech', name: 'PIXEL TECH', price: 100, core: '#263844', edge: '#d2e7e7', role: 'TECNICO PIXEL', character: 'pixel', pixelStyle: 9 },
   { id: 'pixel-heavy', name: 'PIXEL HEAVY', price: 110, core: '#353942', edge: '#979ba4', role: 'PESADO PIXEL', character: 'pixel', pixelStyle: 10 },
   { id: 'pixel-rogue', name: 'PIXEL ROGUE', price: 120, core: '#26262c', edge: '#746e72', role: 'NINJA PIXEL', character: 'pixel', pixelStyle: 11 },
+  { id: 'sniper', name: 'SNIPER', price: 800, core: '#64748b', edge: '#dbeafe', role: 'ECO A DISTANCIA', character: 'sniper' },
+  { id: 'heavy', name: 'HEAVY', price: 950, core: '#334155', edge: '#94a3b8', role: 'ARMADURA PESADA', character: 'heavy' },
+  { id: 'pilot', name: 'PILOT', price: 1100, core: '#0f766e', edge: '#99f6e4', role: 'MOVILIDAD AEREA', character: 'pilot' },
+  { id: 'samurai', name: 'SAMURAI', price: 1300, core: '#991b1b', edge: '#fecaca', role: 'CORTE RAPIDO', character: 'samurai' },
+  { id: 'robot', name: 'ROBOT', price: 1500, core: '#475569', edge: '#67e8f9', role: 'ESCUDO MECANICO', character: 'robot' },
+  { id: 'commando', name: 'COMMANDO', price: 1800, core: '#365314', edge: '#bef264', role: 'CAZADOR ELITE', character: 'commando' },
+  { id: 'shadow', name: 'SHADOW', price: 2200, core: '#18181b', edge: '#a1a1aa', role: 'ECO INVISIBLE', character: 'shadow' },
+  { id: 'boss', name: 'BOSS', price: 2800, core: '#7f1d1d', edge: '#fbbf24', role: 'JEFE FINAL', character: 'boss' },
 ]
+
+const trapSkins = {
+  bird: { id: 'trap-bird', core: '#f472b6', edge: '#ffe4f3', character: 'bird' },
+  wolf: { id: 'trap-wolf', core: '#e11d48', edge: '#fb7185', character: 'wolf' },
+  axe: { id: 'trap-axe', core: '#f43f5e', edge: '#22d3ee', character: 'axe' },
+  zombie: { id: 'trap-zombie', core: '#241238', edge: '#c084fc', character: 'zombie' },
+}
 
 let width = 0
 let height = 0
@@ -1037,8 +1032,12 @@ let nextDecoyAt = 1
 let nextPowerAt = 20
 let best = Number(localStorage.getItem('echo-loop-best') || 0)
 let currency = Number(localStorage.getItem('echo-loop-currency') || 0)
-let unlockedSkins = JSON.parse(localStorage.getItem('echo-loop-skins') || '["retro"]')
-let selectedSkin = localStorage.getItem('echo-loop-selected-skin') || 'retro'
+let unlockedSkins = JSON.parse(localStorage.getItem('echo-loop-skins') || '["pixel-red"]')
+let selectedSkin = localStorage.getItem('echo-loop-selected-skin') || 'pixel-red'
+const playerSkinIds = new Set(skins.map((skin) => skin.id))
+unlockedSkins = unlockedSkins.filter((skinId) => playerSkinIds.has(skinId))
+if (!unlockedSkins.length) unlockedSkins = ['pixel-red']
+if (!playerSkinIds.has(selectedSkin)) selectedSkin = unlockedSkins[0]
 let activePower = null
 let powerUntil = 0
 let powerGraceUntil = 0
@@ -1593,7 +1592,7 @@ function draw(elapsed) {
   })
   context.globalAlpha = 1
   echoes.forEach((echo) => {
-    if (onlineMode && echo.skin === 'zombie') drawCharacter(echo.x, echo.y, skins.find((skin) => skin.character === 'zombie') || skins[5], elapsed, true)
+    if (onlineMode && echo.skin === 'zombie') drawCharacter(echo.x, echo.y, trapSkins.zombie, elapsed, true)
     else drawCircle(echo.x, echo.y, 9, echo.color, true)
   })
   if (onlineMode && remoteControlledEcho && performance.now() - remoteControlledEcho.lastSeen < 3000) {
@@ -1628,13 +1627,7 @@ function drawPlayer(elapsed) {
 }
 
 function drawTrapCharacter(x, y, character, elapsed, opacity = 1) {
-  const trapSkinIds = {
-    bird: 'candy',
-    wolf: 'laser',
-    axe: 'glitch',
-    zombie: 'void',
-  }
-  const skin = skins.find((item) => item.id === trapSkinIds[character]) || skins[0]
+  const skin = trapSkins[character] || trapSkins.zombie
   drawCharacter(x, y, skin, elapsed, opacity < 1)
   context.save()
   context.globalAlpha = opacity
