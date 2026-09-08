@@ -721,6 +721,14 @@ const skins = [
   { id: 'firewall', name: 'MEDIC', price: 400, core: '#ea580c', edge: '#fed7aa', role: 'RESISTENCIA', character: 'medic' },
   { id: 'frost', name: 'SPEED', price: 500, core: '#0ea5e9', edge: '#dff8ff', role: 'SUPER VELOCIDAD', character: 'speed' },
   { id: 'toxic', name: 'TOXIC', price: 650, core: '#3f9d16', edge: '#b8ff5b', role: 'ZOMBI TOXICO', character: 'toxic' },
+  { id: 'sniper', name: 'SNIPER', price: 800, core: '#64748b', edge: '#dbeafe', role: 'ECO A DISTANCIA', character: 'sniper' },
+  { id: 'heavy', name: 'HEAVY', price: 950, core: '#334155', edge: '#94a3b8', role: 'ARMADURA PESADA', character: 'heavy' },
+  { id: 'pilot', name: 'PILOT', price: 1100, core: '#0f766e', edge: '#99f6e4', role: 'MOVILIDAD AEREA', character: 'pilot' },
+  { id: 'samurai', name: 'SAMURAI', price: 1300, core: '#991b1b', edge: '#fecaca', role: 'CORTE RAPIDO', character: 'samurai' },
+  { id: 'robot', name: 'ROBOT', price: 1500, core: '#475569', edge: '#67e8f9', role: 'ESCUDO MECANICO', character: 'robot' },
+  { id: 'commando', name: 'COMMANDO', price: 1800, core: '#365314', edge: '#bef264', role: 'CAZADOR ELITE', character: 'commando' },
+  { id: 'shadow', name: 'SHADOW', price: 2200, core: '#18181b', edge: '#a1a1aa', role: 'ECO INVISIBLE', character: 'shadow' },
+  { id: 'boss', name: 'BOSS', price: 2800, core: '#7f1d1d', edge: '#fbbf24', role: 'JEFE FINAL', character: 'boss' },
 ]
 
 let width = 0
@@ -1224,6 +1232,38 @@ function drawCharacter(x, y, skin, elapsed, ghost) {
   } else if (skin.character === 'commander') {
     context.strokeStyle = skin.edge
     context.beginPath(); context.arc(x, y, 18 + Math.sin(elapsed * 3), 0, Math.PI * 2); context.stroke()
+  } else if (skin.character === 'sniper') {
+    context.strokeStyle = skin.edge
+    context.beginPath(); context.moveTo(x + 7, y - 2); context.lineTo(x + 18, y - 6); context.stroke()
+    context.fillRect(x + 14, y - 8, 5, 3)
+  } else if (skin.character === 'heavy') {
+    context.strokeStyle = skin.edge
+    context.strokeRect(x - 11, y - 17, 22, 28)
+  } else if (skin.character === 'pilot') {
+    context.fillStyle = skin.edge
+    context.fillRect(x - 12, y - 4, 5, 3)
+    context.fillRect(x + 7, y - 4, 5, 3)
+  } else if (skin.character === 'samurai') {
+    context.strokeStyle = skin.edge
+    context.beginPath(); context.moveTo(x + 8, y - 15); context.lineTo(x + 18, y - 22); context.stroke()
+  } else if (skin.character === 'robot') {
+    context.strokeStyle = skin.edge
+    context.strokeRect(x - 8, y - 15, 16, 12)
+    context.fillStyle = skin.edge
+    context.fillRect(x - 4, y - 11, 2, 2)
+    context.fillRect(x + 2, y - 11, 2, 2)
+  } else if (skin.character === 'commando') {
+    context.fillStyle = skin.edge
+    context.fillRect(x - 10, y - 18, 20, 4)
+    context.fillRect(x + 9, y - 10, 8, 3)
+  } else if (skin.character === 'shadow') {
+    context.globalAlpha = alpha * 0.45
+    context.fillStyle = skin.edge
+    context.beginPath(); context.arc(x, y, 18, 0, Math.PI * 2); context.fill()
+  } else if (skin.character === 'boss') {
+    context.strokeStyle = skin.edge
+    context.lineWidth = 3
+    context.beginPath(); context.moveTo(x - 9, y - 16); context.lineTo(x - 4, y - 23); context.lineTo(x, y - 16); context.lineTo(x + 5, y - 23); context.lineTo(x + 10, y - 16); context.stroke()
   }
   context.restore()
 }
