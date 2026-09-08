@@ -71,18 +71,18 @@ document.querySelector('#app').innerHTML = `
 
 let canvas = document.querySelector('#game')
 let context = canvas.getContext('2d')
-const timeElement = document.querySelector('#time')
-const bestElement = document.querySelector('#best')
-const echoCountElement = document.querySelector('#echo-count')
-const powerStatusElement = document.querySelector('#power-status')
-const message = document.querySelector('#message')
-const powerPanel = document.querySelector('#power-panel')
-const powerGrid = document.querySelector('#power-grid')
-const startButton = document.querySelector('#start-button')
-const soundButton = document.querySelector('#sound-button')
+let timeElement = document.querySelector('#time')
+let bestElement = document.querySelector('#best')
+let echoCountElement = document.querySelector('#echo-count')
+let powerStatusElement = document.querySelector('#power-status')
+let message = document.querySelector('#message')
+let powerPanel = document.querySelector('#power-panel')
+let powerGrid = document.querySelector('#power-grid')
+let startButton = document.querySelector('#start-button')
+let soundButton = document.querySelector('#sound-button')
 const goldBallButton = document.querySelector('#gold-ball')
-const skinList = document.querySelector('#skin-list')
-const currencyElement = document.querySelector('#currency')
+let skinList = document.querySelector('#skin-list')
+let currencyElement = document.querySelector('#currency')
 const playOnlineButton = document.querySelector('#play-online-button')
 const nicknameOverlay = document.querySelector('#nickname-overlay')
 const nicknameForm = document.querySelector('#nickname-form')
@@ -110,6 +110,8 @@ let onlineSetupActive = false
 let onlineSelectedTrap = 'bird-net'
 let onlineSetupTraps = []
 let onlineSetupTimer = null
+let onlineBeginTimer = null
+let onlineRestartTimer = null
 let onlineSetupDraw = null
 let onlineSetupReady = false
 let remoteSetupReady = false
@@ -121,6 +123,20 @@ let spectatorEchoActive = false
 let remoteControlledEcho = null
 const onlineChannel = 'BroadcastChannel' in window ? new BroadcastChannel('echo-loop-live-arena') : null
 const presenceKeyPrefix = 'echo-loop-online-player-'
+
+function refreshGameReferences() {
+  timeElement = document.querySelector('#time')
+  bestElement = document.querySelector('#best')
+  echoCountElement = document.querySelector('#echo-count')
+  powerStatusElement = document.querySelector('#power-status')
+  message = document.querySelector('#message')
+  powerPanel = document.querySelector('#power-panel')
+  powerGrid = document.querySelector('#power-grid')
+  startButton = document.querySelector('#start-button')
+  soundButton = document.querySelector('#sound-button')
+  skinList = document.querySelector('#skin-list')
+  currencyElement = document.querySelector('#currency')
+}
 
 function handleOnlinePresence(state) {
   if (!state || state.id === localPlayerId) return
@@ -142,6 +158,7 @@ if (onlineChannel) {
     if (state.type === 'player-defeated') {
       onlineOpponentAlive = false
       if (running && onlinePlayerAlive) updatePeerRoomDisplay('RIVAL ELIMINADO · CONTINUA')
+      if (!onlinePlayerAlive) scheduleOnlineRestart()
       return
     }
     if (state.type === 'spectator-echo') {
@@ -197,7 +214,14 @@ function startPeerMatch() {
 }
 
 function showOnlineTrapSetup() {
+  if (onlineBeginTimer) clearInterval(onlineBeginTimer)
+  if (onlineRestartTimer) clearTimeout(onlineRestartTimer)
   onlineSetupActive = true
+  onlineMode = false
+  onlineMatchActive = false
+  onlinePlayerAlive = true
+  onlineOpponentAlive = true
+  onlineMatchEnded = false
   onlineSetupReady = false
   remoteSetupReady = false
   onlineSetupTraps = []
@@ -207,13 +231,7 @@ function showOnlineTrapSetup() {
   const startButton = document.querySelector('#online-start-button')
   const countdown = document.querySelector('#online-setup-countdown')
   if (onlineSetupTimer) clearInterval(onlineSetupTimer)
-  let remaining = 5
-  if (countdown) countdown.textContent = remaining
-  onlineSetupTimer = setInterval(() => {
-    remaining -= 1
-    if (countdown) countdown.textContent = remaining
-    if (remaining <= 0) confirmOnlineSetup()
-  }, 1000)
+  if (countdown) countdown.textContent = '--'
   startButton?.addEventListener('click', confirmOnlineSetup, { once: true })
   document.querySelectorAll('[data-trap-choice]').forEach((button) => button.addEventListener('click', () => {
     onlineSelectedTrap = button.dataset.trapChoice
@@ -244,11 +262,28 @@ function confirmOnlineSetup() {
   if (peerConnection?.open) peerConnection.send(setupMessage)
   if (onlineChannel) onlineChannel.postMessage({ ...setupMessage, id: localPlayerId })
   updateSetupReadyDisplay()
-  if (remoteSetupReady) beginOnlineMatch()
+  if (remoteSetupReady) scheduleOnlineMatchStart()
+}
+
+function scheduleOnlineMatchStart() {
+  if (!onlineSetupActive || !onlineSetupReady || !remoteSetupReady || onlineBeginTimer) return
+  const countdown = document.querySelector('#online-setup-countdown')
+  let remaining = 5
+  if (countdown) countdown.textContent = remaining
+  updatePeerRoomDisplay('AMBOS LISTOS · COMIENZA EN 5s')
+  onlineBeginTimer = setInterval(() => {
+    remaining -= 1
+    if (countdown) countdown.textContent = remaining
+    if (remaining <= 0) {
+      clearInterval(onlineBeginTimer)
+      onlineBeginTimer = null
+      beginOnlineMatch()
+    }
+  }, 1000)
 }
 
 function placeOnlineTrap(event) {
-  if (!onlineSetupActive || !canvas) return false
+  if (!onlineSetupActive || onlineSetupReady || !canvas) return false
   const bounds = canvas.getBoundingClientRect()
   const point = event.touches ? event.touches[0] : event
   onlineSetupTraps.push({ type: onlineSelectedTrap, x: point.clientX - bounds.left, y: point.clientY - bounds.top, radius: onlineSelectedTrap === 'bird-net' ? 34 : 26, born: 0, active: true, laserAngle: 0 })
@@ -261,6 +296,8 @@ function beginOnlineMatch() {
   onlineSetupActive = false
   onlineSetupReady = true
   if (onlineSetupTimer) clearInterval(onlineSetupTimer)
+  if (onlineBeginTimer) clearInterval(onlineBeginTimer)
+  onlineBeginTimer = null
   if (!onlineSetupTraps.length) {
     onlineSetupTraps = [
       { type: 'bird-net', x: width * .25, y: height * .35, radius: 34, born: 0, active: true, laserAngle: 0 },
@@ -277,6 +314,19 @@ function beginOnlineMatch() {
   onlineCountdown = 60
   updatePeerRoomDisplay('PERSEGUIR AL RIVAL')
   startRun()
+}
+
+function scheduleOnlineRestart() {
+  if (onlinePlayerAlive || onlineOpponentAlive || onlineRestartTimer) return
+  onlineMatchEnded = true
+  running = false
+  onlineMode = false
+  onlineMatchActive = false
+  updatePeerRoomDisplay('AMBOS ELIMINADOS · NUEVA RONDA EN 10s')
+  onlineRestartTimer = setTimeout(() => {
+    onlineRestartTimer = null
+    showOnlineTrapSetup()
+  }, 10000)
 }
 
 function sendSpectatorEcho(x, y) {
@@ -319,12 +369,13 @@ function attachPeerConnection(connection, name) {
       remoteSetupReady = message.ready === true
       if (Array.isArray(message.traps)) remoteTraps = message.traps
       updateSetupReadyDisplay()
-      if (onlineSetupReady && remoteSetupReady) beginOnlineMatch()
+      if (onlineSetupReady && remoteSetupReady) scheduleOnlineMatchStart()
       return
     }
     if (message?.type === 'player-defeated') {
       onlineOpponentAlive = false
       if (running && onlinePlayerAlive) updatePeerRoomDisplay('RIVAL ELIMINADO · CONTINUA')
+      if (!onlinePlayerAlive) scheduleOnlineRestart()
       return
     }
     if (message?.type === 'spectator-echo') {
@@ -435,6 +486,15 @@ function renderOnlineWaitingState(name) {
         <div><span class="eyebrow">SALA P2P GRATUITA</span><strong id="online-room-code">GENERANDO...</strong></div>
         <span id="online-connection-status">ESPERANDO CONEXIÓN P2P</span>
       </section>
+      <section class="hud" aria-label="Estado de la partida">
+        <div><span class="hud-label">TIEMPO</span><strong id="time">00.0</strong></div>
+        <div class="hud-center"><span class="hud-label">RÉCORD</span><strong id="best">00.0</strong></div>
+        <div class="hud-right"><span class="hud-label">PODER · <span id="power-status">--</span></span><strong id="echo-count">0</strong></div>
+      </section>
+      <section class="skin-strip" aria-label="Skins desbloqueables">
+        <div class="skin-title"><span class="hud-label">SKINS</span><strong id="currency">0⌁</strong></div>
+        <div class="skin-list" id="skin-list"></div>
+      </section>
       <section class="online-setup" id="online-setup" hidden>
         <div class="setup-heading"><span class="eyebrow">FASE DE PREPARACIÓN</span><strong>COLOCA TUS TRAMPAS</strong><small>Elige una y toca el mapa. Inicio automático en <b id="online-setup-countdown">5</b>s.</small></div>
         <div class="trap-choice-list">
@@ -446,10 +506,18 @@ function renderOnlineWaitingState(name) {
       </section>
       <section class="game-wrap online-match-wrap">
         <canvas id="game" aria-label="Arena de preparación online."></canvas>
+        <div class="game-message hidden" id="message">
+          <span class="eyebrow">ARENA ONLINE</span>
+          <h1>ESPERA<br><em>AL RIVAL.</em></h1>
+          <p>La ronda comenzará cuando ambos jugadores estén listos.</p>
+          <button class="primary-button" id="start-button" hidden type="button"><span>INICIAR RUN</span><span>→</span></button>
+        </div>
       </section>
     </main>
   `
 
+  refreshGameReferences()
+  updateSkinStore()
   const waitingCanvas = document.querySelector('#game')
   window.requestAnimationFrame(() => {
     canvas = document.querySelector('#game')
@@ -851,6 +919,8 @@ let startTime = 0
 let lastFrame = 0
 let elapsedTime = 0
 let nextPatternAt = 10
+let nextTrapAt = 15
+let difficultyLevel = 1
 let nextDecoyAt = 1
 let nextPowerAt = 20
 let best = Number(localStorage.getItem('echo-loop-best') || 0)
@@ -957,21 +1027,21 @@ function createOnlineTrap(type, born) {
 }
 
 function createLocalTrapSet() {
-  const wolf = createOnlineTrap('wolf-laser', 0)
-  wolf.x = arena.left + (arena.right - arena.left) * 0.25
-  wolf.y = arena.top + (arena.bottom - arena.top) * 0.32
-  wolf.active = true
-  const bird = createOnlineTrap('bird-net', 3)
-  bird.x = arena.left + (arena.right - arena.left) * 0.7
-  bird.y = arena.top + (arena.bottom - arena.top) * 0.62
-  bird.active = true
-  const axe = createOnlineTrap('axe', 6)
-  axe.x = arena.left + (arena.right - arena.left) * 0.52
-  axe.y = arena.top + (arena.bottom - arena.top) * 0.5
-  axe.homeX = axe.x
-  axe.homeY = axe.y
-  axe.active = true
-  return [wolf, bird, axe]
+  return [0, 3, 6].map((born) => createRandomLocalTrap(born, 1))
+}
+
+function createRandomLocalTrap(born, level = difficultyLevel) {
+  const trapTypes = level >= 3 ? ['wolf-laser', 'bird-net', 'axe'] : level === 2 ? ['wolf-laser', 'bird-net', 'axe'] : ['wolf-laser', 'bird-net']
+  const trap = createOnlineTrap(trapTypes[Math.floor(Math.random() * trapTypes.length)], born)
+  trap.active = born <= 0
+  if (trap.type === 'axe') {
+    trap.speed = 170 + level * 18
+    trap.orbitRadius = 60 + level * 12
+  }
+  if (trap.type === 'wolf-laser') trap.laserSpeed = 0.75 + level * 0.12
+  trap.homeX = trap.x
+  trap.homeY = trap.y
+  return trap
 }
 
 function startRun() {
@@ -983,6 +1053,8 @@ function startRun() {
   lastFrame = startTime
   elapsedTime = 0
   nextPatternAt = 10
+  nextTrapAt = 15
+  difficultyLevel = 1
   nextDecoyAt = 1
   nextPowerAt = 20
   history = []
@@ -1044,7 +1116,12 @@ function update(elapsed, delta) {
   trails.push({ time: elapsed, x: player.x, y: player.y })
   trails = trails.filter((point) => elapsed - point.time < 1.4)
 
-  const difficulty = 1 + Math.floor(elapsed / 15)
+  const difficulty = 1 + Math.floor(elapsed / 30)
+  difficultyLevel = difficulty
+  if (!onlineMode && elapsed >= nextTrapAt) {
+    traps.push(createRandomLocalTrap(elapsed, difficulty))
+    nextTrapAt += 15
+  }
   if (onlineMode && elapsed >= 100 && !onlineBoosted) {
     onlineBoosted = true
     powerStatusElement.textContent = 'SUPER VELOCIDAD'
@@ -1182,11 +1259,11 @@ function update(elapsed, delta) {
     if (Math.hypot(player.x - opponent.x, player.y - opponent.y) < playerRadius * 2.3) {
       const attackerWins = elapsed >= Number(opponent.elapsed || 0)
       if (attackerWins) {
-        sendMatchResult('defeated')
         endRun(elapsed, 'EL RIVAL TE DERRIBO.')
       } else {
+        onlineOpponentAlive = false
         sendMatchResult('defeated')
-        showWinScreen()
+        updatePeerRoomDisplay('RIVAL ELIMINADO · CONTINUA')
       }
     }
   }
@@ -1608,6 +1685,7 @@ function endRun(elapsed, reason = 'Tu pasado te encontró.') {
     onlinePlayerAlive = false
     sendMatchResult('defeated')
     showSpectatorScreen(reason)
+    scheduleOnlineRestart()
     return
   }
   running = false
@@ -1662,7 +1740,9 @@ function bindCanvasControls() {
   canvas.dataset.controlsBound = 'true'
 }
 
-startButton.addEventListener('click', startRun)
+document.addEventListener('click', (event) => {
+  if (event.target.closest('#start-button')) startRun()
+})
 soundButton.addEventListener('click', () => {
   const muted = soundButton.textContent === '◒'
   soundButton.textContent = muted ? '◐' : '◒'
