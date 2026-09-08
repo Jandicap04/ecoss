@@ -187,6 +187,7 @@ function attachPeerConnection(connection, name) {
   connection.on('data', (message) => {
     if (!message || message.type !== 'player-state') return
     opponent = { id: connection.peer, name: message.name || 'RIVAL', x: message.x, y: message.y, lastSeen: performance.now() }
+    if (Array.isArray(message.traps)) remoteTraps = message.traps
     onlinePeers.set(connection.peer, { id: connection.peer, name: opponent.name, lastSeen: performance.now() })
     updateOnlinePlayersDisplay()
   })
@@ -636,18 +637,18 @@ const powers = [
   { id: 'invert', title: 'ESPEJO ROTO', text: 'Los ecos invierten su dirección durante 2 segundos.', icon: '↔' },
 ]
 const skins = [
-  { id: 'retro', name: 'RETRO', price: 0, core: '#20a4ff', edge: '#b8e9ff' },
-  { id: 'plasma', name: 'PLASMA', price: 20, core: '#a855f7', edge: '#f0abfc' },
-  { id: 'candy', name: 'CANDY', price: 40, core: '#f472b6', edge: '#ffe4f3' },
-  { id: 'matrix', name: 'MATRIX', price: 70, core: '#52d11c', edge: '#d4ff7c' },
-  { id: 'glitch', name: 'GLITCH', price: 100, core: '#f43f5e', edge: '#22d3ee' },
-  { id: 'void', name: 'VOID', price: 140, core: '#241238', edge: '#c084fc' },
-  { id: 'laser', name: 'LASER', price: 190, core: '#e11d48', edge: '#fb7185' },
-  { id: 'gold', name: 'GOLD', price: 250, core: '#e19b18', edge: '#fff0a8' },
-  { id: 'nebula', name: 'NEBULA', price: 320, core: '#5b21b6', edge: '#e9d5ff' },
-  { id: 'firewall', name: 'FIREWALL', price: 400, core: '#ea580c', edge: '#fed7aa' },
-  { id: 'frost', name: 'FROST', price: 500, core: '#0ea5e9', edge: '#dff8ff' },
-  { id: 'toxic', name: 'TOXIC', price: 650, core: '#3f9d16', edge: '#b8ff5b' },
+  { id: 'retro', name: 'RETRO', price: 0, core: '#20a4ff', edge: '#b8e9ff', role: 'CONSTRUCTOR AZUL' },
+  { id: 'plasma', name: 'PLASMA', price: 20, core: '#a855f7', edge: '#f0abfc', role: 'ECO VIOLETA' },
+  { id: 'candy', name: 'CANDY', price: 40, core: '#f472b6', edge: '#ffe4f3', role: 'PAJARO' },
+  { id: 'matrix', name: 'MATRIX', price: 70, core: '#52d11c', edge: '#d4ff7c', role: 'ECO VERDE' },
+  { id: 'glitch', name: 'GLITCH', price: 100, core: '#f43f5e', edge: '#22d3ee', role: 'HACHA' },
+  { id: 'void', name: 'VOID', price: 140, core: '#241238', edge: '#c084fc', role: 'ZOMBI' },
+  { id: 'laser', name: 'LASER', price: 190, core: '#e11d48', edge: '#fb7185', role: 'LOBO' },
+  { id: 'gold', name: 'GOLD', price: 250, core: '#e19b18', edge: '#fff0a8', role: 'GUERRERO' },
+  { id: 'nebula', name: 'NEBULA', price: 320, core: '#5b21b6', edge: '#e9d5ff', role: 'ECO OSCURO' },
+  { id: 'firewall', name: 'FIREWALL', price: 400, core: '#ea580c', edge: '#fed7aa', role: 'CASCO NARANJA' },
+  { id: 'frost', name: 'FROST', price: 500, core: '#0ea5e9', edge: '#dff8ff', role: 'SUPER VELOCIDAD' },
+  { id: 'toxic', name: 'TOXIC', price: 650, core: '#3f9d16', edge: '#b8ff5b', role: 'ZOMBI TOXICO' },
 ]
 
 let width = 0
@@ -658,6 +659,7 @@ let echoes = []
 let particles = []
 let trails = []
 let traps = []
+let remoteTraps = []
 let idleFor = 0
 let arena = { left: 20, top: 20, right: 0, bottom: 0 }
 let running = false
@@ -674,6 +676,8 @@ let selectedSkin = localStorage.getItem('echo-loop-selected-skin') || 'retro'
 let activePower = null
 let powerUntil = 0
 let powerGraceUntil = 0
+let onlineBoosted = false
+let onlineLastEliminationAt = 0
 
 bestElement.textContent = best.toFixed(1).padStart(4, '0')
 updateSkinStore()
@@ -684,7 +688,7 @@ function updateSkinStore() {
     const unlocked = unlockedSkins.includes(skin.id)
     const selected = selectedSkin === skin.id
     const label = selected ? 'USANDO' : unlocked ? 'ELEGIR' : `${skin.price}⌁`
-    return `<button class="skin-chip ${selected ? 'selected' : ''}" data-skin="${skin.id}" style="--skin-core:${skin.core};--skin-edge:${skin.edge}" title="${skin.name}"><span class="skin-orb"></span><span>${skin.name}</span><small>${label}</small></button>`
+    return `<button class="skin-chip ${selected ? 'selected' : ''}" data-skin="${skin.id}" style="--skin-core:${skin.core};--skin-edge:${skin.edge}" title="${skin.name} · ${skin.role}"><span class="skin-orb"></span><span>${skin.name}</span><small>${label}</small></button>`
   }).join('')
   skinList.querySelectorAll('.skin-chip').forEach((button) => button.addEventListener('click', () => {
     const skin = skins.find((item) => item.id === button.dataset.skin)
@@ -747,6 +751,22 @@ function pointerMove(event) {
   player.targetY = Math.max(arena.top + 16, Math.min(arena.bottom - 16, point.clientY - bounds.top))
 }
 
+function createOnlineTrap(type, born) {
+  return {
+    type,
+    x: arena.left + 50 + Math.random() * Math.max(30, arena.right - arena.left - 100),
+    y: arena.top + 50 + Math.random() * Math.max(30, arena.bottom - arena.top - 100),
+    radius: type === 'bird-net' ? 34 : 26,
+    born,
+    speed: type === 'axe' ? 170 : type === 'zombie-echo' ? 26 : 0,
+    memoryDelay: 2.5,
+    phase: Math.random() * Math.PI * 2,
+    laserAngle: Math.random() * Math.PI * 2,
+    laserSpeed: type === 'wolf-laser' ? 0.75 : 0,
+    active: false,
+  }
+}
+
 function startRun() {
   resize()
   randomizeArena()
@@ -762,9 +782,12 @@ function startRun() {
   particles = []
   trails = []
   traps = []
+  remoteTraps = []
   idleFor = 0
   activePower = null
   powerGraceUntil = 0
+  onlineBoosted = false
+  onlineLastEliminationAt = 0
   powerStatusElement.textContent = '--'
   powerPanel.hidden = true
   delete powerPanel.dataset.shown
@@ -773,30 +796,10 @@ function startRun() {
     onlineCountdown = 60
     setTimeout(() => {
       if (!running) return
-      for (let i = 0; i < 5; i += 1) {
-        echoes.push({
-          born: elapsedTime,
-          color: i % 2 ? '#ff8a65' : '#d7ff63',
-          drift: (Math.random() - 0.5) * 36,
-          phase: Math.random() * Math.PI * 2,
-          isDecoy: false,
-          x: arena.left + 40 + Math.random() * (arena.right - arena.left - 80),
-          y: arena.top + 40 + Math.random() * (arena.bottom - arena.top - 80),
-        })
-      }
-      for (let i = 0; i < 2; i += 1) {
-        traps.push({
-          x: arena.left + 60 + Math.random() * (arena.right - arena.left - 120),
-          y: arena.top + 60 + Math.random() * (arena.bottom - arena.top - 120),
-          radius: 26,
-          born: elapsedTime,
-          speed: 10,
-          memoryDelay: 2,
-          phase: Math.random() * Math.PI,
-          laserAngle: Math.random() * Math.PI * 2,
-          laserSpeed: 0.9,
-        })
-      }
+      traps.push(createOnlineTrap('wolf-laser', elapsedTime))
+      traps.push(createOnlineTrap('bird-net', elapsedTime + 3))
+      traps.push(createOnlineTrap('axe', elapsedTime + 6))
+      traps.push(createOnlineTrap('zombie-echo', elapsedTime + 9))
     }, 1000)
   }
   requestAnimationFrame(frame)
@@ -820,7 +823,7 @@ function update(elapsed, delta) {
   player.x += (player.targetX - player.x) * smoothing
   player.y += (player.targetY - player.y) * smoothing
   if (onlineMode && performance.now() - lastOnlineBroadcast > 50) {
-    const state = { type: 'player-state', id: localPlayerId, name: localStorage.getItem('echo-loop-player-name') || 'JUGADOR', x: player.x, y: player.y }
+    const state = { type: 'player-state', id: localPlayerId, name: localStorage.getItem('echo-loop-player-name') || 'JUGADOR', x: player.x, y: player.y, traps: onlineMode ? traps.map(({ type, x, y, radius, born, laserAngle, active }) => ({ type, x, y, radius, born, laserAngle, active })) : [] }
     if (onlineChannel) onlineChannel.postMessage(state)
     if (peerConnection?.open) peerConnection.send(state)
     lastOnlineBroadcast = performance.now()
@@ -837,6 +840,13 @@ function update(elapsed, delta) {
   trails = trails.filter((point) => elapsed - point.time < 1.4)
 
   const difficulty = 1 + Math.floor(elapsed / 15)
+  if (onlineMode && elapsed >= 100 && !onlineBoosted) {
+    onlineBoosted = true
+    powerStatusElement.textContent = 'SUPER VELOCIDAD'
+  }
+  const movementSmoothing = onlineBoosted ? Math.min(1, delta * 14) : smoothing
+  player.x += (player.targetX - player.x) * (movementSmoothing - smoothing)
+  player.y += (player.targetY - player.y) * (movementSmoothing - smoothing)
   if (elapsed >= nextDecoyAt) {
     echoes.push({
       born: elapsed,
@@ -851,7 +861,7 @@ function update(elapsed, delta) {
     nextDecoyAt = elapsed < 2 ? 10 : elapsed + Math.max(3.5, 7 - difficulty * 0.8)
     echoCountElement.textContent = echoes.length
   }
-  if (elapsed >= nextPatternAt) {
+  if (!onlineMode && elapsed >= nextPatternAt) {
     echoes.push({
       born: elapsed,
       color: echoes.length % 2 ? '#ff8a65' : '#d7ff63',
@@ -864,7 +874,7 @@ function update(elapsed, delta) {
   }
   echoes = echoes.filter((echo) => elapsed - echo.born < 5)
   echoCountElement.textContent = echoes.length
-  if (elapsed >= 8 && traps.length < Math.floor(elapsed / Math.max(6, 12 - difficulty)) + 1) {
+  if (!onlineMode && elapsed >= 8 && traps.length < Math.floor(elapsed / Math.max(6, 12 - difficulty)) + 1) {
     const angle = traps.length * 2.4 + 0.8
     traps.push({ x: (arena.left + arena.right) / 2 + Math.cos(angle) * (arena.right - arena.left) * 0.28, y: (arena.top + arena.bottom) / 2 + Math.sin(angle) * (arena.bottom - arena.top) * 0.28, radius: 26, born: elapsed, speed: 7 + difficulty * 4, memoryDelay: 2 + traps.length * 0.6, phase: Math.random() * Math.PI, laserAngle: Math.random() * Math.PI * 2, laserSpeed: 0.8 + difficulty * 0.12 })
   }
@@ -889,6 +899,30 @@ function update(elapsed, delta) {
     }
   }
   traps.forEach((trap) => {
+    if (onlineMode) {
+      if (elapsed < trap.born) return
+      trap.active = true
+      if (trap.type === 'wolf-laser') {
+        trap.laserAngle += trap.laserSpeed * delta
+      } else if (trap.type === 'bird-net') {
+        trap.x += Math.cos(elapsed * 1.7 + trap.phase) * 12 * delta
+        trap.y += Math.sin(elapsed * 1.3 + trap.phase) * 12 * delta
+      } else if (trap.type === 'axe') {
+        const angle = Math.atan2((opponent?.y || player.y) - trap.y, (opponent?.x || player.x) - trap.x)
+        trap.x += Math.cos(angle) * trap.speed * delta
+        trap.y += Math.sin(angle) * trap.speed * delta
+      } else if (trap.type === 'zombie-echo') {
+        const echoTime = Math.max(0, elapsed - trap.memoryDelay)
+        const remembered = history.reduce((closest, point) => Math.abs(point.time - echoTime) < Math.abs(closest.time - echoTime) ? point : closest, history[0])
+        if (remembered) {
+          trap.x += (remembered.x - trap.x) * delta * 2
+          trap.y += (remembered.y - trap.y) * delta * 2
+        }
+      }
+      trap.x = Math.max(arena.left + 16, Math.min(arena.right - 16, trap.x))
+      trap.y = Math.max(arena.top + 16, Math.min(arena.bottom - 16, trap.y))
+      return
+    }
     const cycle = Math.floor((elapsed - trap.born) / 4) % 2
     const memoryTime = Math.max(0, elapsed - trap.memoryDelay)
     const remembered = history.reduce((closest, point) => Math.abs(point.time - memoryTime) < Math.abs(closest.time - memoryTime) ? point : closest, history[0])
@@ -908,12 +942,31 @@ function update(elapsed, delta) {
   detectCollisions(elapsed)
   timeElement.textContent = elapsed.toFixed(1).padStart(4, '0')
 
-  if (elapsed >= nextPowerAt && !powerPanel.dataset.shown) showPowerChoice()
+  if (!onlineMode && elapsed >= nextPowerAt && !powerPanel.dataset.shown) showPowerChoice()
 }
 
 function detectCollisions(elapsed) {
   if (elapsed < powerGraceUntil) return
-  for (const trap of traps) {
+  const collisionTraps = onlineMode ? [...traps, ...remoteTraps] : traps
+  for (const trap of collisionTraps) {
+    if (onlineMode) {
+      if (!trap.active) continue
+      if (trap.type === 'wolf-laser') {
+        const laserLength = Math.max(arena.right - arena.left, arena.bottom - arena.top)
+        const laserEndX = trap.x + Math.cos(trap.laserAngle) * laserLength
+        const laserEndY = trap.y + Math.sin(trap.laserAngle) * laserLength
+        if (distanceToSegment(player.x, player.y, trap.x, trap.y, laserEndX, laserEndY) < playerRadius + 4) {
+          burst(player.x, player.y, '#ff304f', elapsed)
+          endRun(elapsed, 'EL LOBO TE ALCANZO.')
+          return
+        }
+      } else if (Math.hypot(player.x - trap.x, player.y - trap.y) < trap.radius + playerRadius) {
+        burst(player.x, player.y, trap.type === 'zombie-echo' ? '#8dff70' : '#ff8a65', elapsed)
+        endRun(elapsed, trap.type === 'axe' ? 'EL HACHA TE ENCONTRO.' : trap.type === 'bird-net' ? 'CAISTE EN LA TRAMPA DEL PAJARO.' : 'TU ECO ZOMBI TE ALCANZO.')
+        return
+      }
+      continue
+    }
     if (Math.hypot(player.x - trap.x, player.y - trap.y) < trap.radius + playerRadius) {
       burst(player.x, player.y, '#ff8a65', elapsed)
       endRun(elapsed, 'PISASTE UNA TRAMPA.')
@@ -981,7 +1034,40 @@ function draw(elapsed) {
   context.setLineDash([5, 8])
   context.strokeRect(arena.left, arena.top, arena.right - arena.left, arena.bottom - arena.top)
   context.setLineDash([])
-  traps.forEach((trap) => {
+  const visibleTraps = onlineMode ? [...traps, ...remoteTraps] : traps
+  visibleTraps.forEach((trap) => {
+    if (onlineMode) {
+      if (!trap.active) return
+      const color = trap.type === 'wolf-laser' ? '#ff304f' : trap.type === 'zombie-echo' ? '#8dff70' : trap.type === 'axe' ? '#f7c66b' : '#d7ff63'
+      context.globalAlpha = 0.82
+      context.fillStyle = color
+      context.strokeStyle = color
+      context.lineWidth = 2
+      if (trap.type === 'wolf-laser') {
+        const laserLength = Math.max(arena.right - arena.left, arena.bottom - arena.top)
+        context.beginPath()
+        context.moveTo(trap.x, trap.y)
+        context.lineTo(trap.x + Math.cos(trap.laserAngle) * laserLength, trap.y + Math.sin(trap.laserAngle) * laserLength)
+        context.stroke()
+        context.fillText('LOBO', trap.x, trap.y - 16)
+      } else if (trap.type === 'axe') {
+        context.save()
+        context.translate(trap.x, trap.y)
+        context.rotate(Math.atan2((opponent?.y || player.y) - trap.y, (opponent?.x || player.x) - trap.x))
+        context.fillRect(-12, -2, 24, 4)
+        context.fillRect(5, -9, 8, 18)
+        context.restore()
+      } else {
+        context.beginPath()
+        context.arc(trap.x, trap.y, trap.radius, 0, Math.PI * 2)
+        context.stroke()
+        context.font = '9px DM Mono, monospace'
+        context.textAlign = 'center'
+        context.fillText(trap.type === 'bird-net' ? 'PAJARO' : 'ZOMBI ECO', trap.x, trap.y - trap.radius - 6)
+      }
+      context.globalAlpha = 1
+      return
+    }
     const pulse = 1 + Math.sin((elapsed - trap.born) * 4) * 0.08
     context.globalAlpha = 0.28
     context.strokeStyle = '#ff8a65'
@@ -1009,11 +1095,11 @@ function draw(elapsed) {
   echoes.forEach((echo) => drawCircle(echo.x, echo.y, 9, echo.color, true))
   particles.forEach((particle) => drawCircle(particle.x, particle.y, 2, particle.color, false))
   if (onlineMode && opponent && performance.now() - opponent.lastSeen < 3000) {
-    drawCircle(opponent.x, opponent.y, playerRadius + 1, '#ff8a65', false)
+    drawCircle(opponent.x, opponent.y, playerRadius + 1, '#ff8a65', true)
     context.fillStyle = '#ffcfbf'
     context.font = '10px DM Mono, monospace'
     context.textAlign = 'center'
-    context.fillText(opponent.name, opponent.x, opponent.y - 18)
+    context.fillText(`${opponent.name} · ECO`, opponent.x, opponent.y - 18)
   }
   drawPlayer(elapsed)
   context.beginPath(); context.arc(player.x, player.y, 19 + Math.sin(elapsed * 5) * 2, 0, Math.PI * 2)
