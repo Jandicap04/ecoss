@@ -41,6 +41,7 @@ document.querySelector('#app').innerHTML = `
     <section class="hud" aria-label="Estado de la partida">
       <div><span class="hud-label">TIEMPO</span><strong id="time">00.0</strong></div>
       <div class="hud-center"><span class="hud-label">RÉCORD</span><strong id="best">00.0</strong></div>
+      <div><span class="hud-label">VIDAS</span><strong id="lives">2</strong></div>
       <div class="hud-right"><span class="hud-label">PODER · <span id="power-status">--</span></span><strong id="echo-count">0</strong></div>
     </section>
     <section class="skin-strip" aria-label="Skins desbloqueables">
@@ -74,6 +75,7 @@ let context = canvas.getContext('2d')
 let timeElement = document.querySelector('#time')
 let bestElement = document.querySelector('#best')
 let echoCountElement = document.querySelector('#echo-count')
+let livesElement = document.querySelector('#lives')
 let powerStatusElement = document.querySelector('#power-status')
 let message = document.querySelector('#message')
 let powerPanel = document.querySelector('#power-panel')
@@ -128,6 +130,7 @@ function refreshGameReferences() {
   timeElement = document.querySelector('#time')
   bestElement = document.querySelector('#best')
   echoCountElement = document.querySelector('#echo-count')
+  livesElement = document.querySelector('#lives')
   powerStatusElement = document.querySelector('#power-status')
   message = document.querySelector('#message')
   powerPanel = document.querySelector('#power-panel')
@@ -489,6 +492,7 @@ function renderOnlineWaitingState(name) {
       <section class="hud" aria-label="Estado de la partida">
         <div><span class="hud-label">TIEMPO</span><strong id="time">00.0</strong></div>
         <div class="hud-center"><span class="hud-label">RÉCORD</span><strong id="best">00.0</strong></div>
+        <div><span class="hud-label">VIDAS</span><strong id="lives">2</strong></div>
         <div class="hud-right"><span class="hud-label">PODER · <span id="power-status">--</span></span><strong id="echo-count">0</strong></div>
       </section>
       <section class="skin-strip" aria-label="Skins desbloqueables">
@@ -511,6 +515,11 @@ function renderOnlineWaitingState(name) {
           <h1>ESPERA<br><em>AL RIVAL.</em></h1>
           <p>La ronda comenzará cuando ambos jugadores estén listos.</p>
           <button class="primary-button" id="start-button" hidden type="button"><span>INICIAR RUN</span><span>→</span></button>
+        </div>
+        <div class="power-panel" id="power-panel" hidden>
+          <span class="eyebrow">NUEVA MUTACIÓN</span>
+          <h2>Elige tu ventaja</h2>
+          <div class="power-grid" id="power-grid"></div>
         </div>
       </section>
     </main>
@@ -915,6 +924,7 @@ let remoteTraps = []
 let idleFor = 0
 let arena = { left: 20, top: 20, right: 0, bottom: 0 }
 let running = false
+let lives = 2
 let startTime = 0
 let lastFrame = 0
 let elapsedTime = 0
@@ -1049,6 +1059,8 @@ function startRun() {
   resize()
   randomizeArena()
   running = true
+  lives = 2
+  livesElement.textContent = lives
   startTime = performance.now()
   lastFrame = startTime
   elapsedTime = 0
@@ -1178,7 +1190,12 @@ function update(elapsed, delta) {
   }
   traps.forEach((trap) => {
     if (onlineMode || trap.type) {
+      if (onlineMode && trap.type === 'bird-net' && trap.spawned) {
+        trap.active = false
+        return
+      }
       if (elapsed < trap.born) return
+      if (trap.type === 'thrown-hammer' && trap.active === false) return
       trap.active = true
       trap.homeX ??= trap.x
       trap.homeY ??= trap.y
@@ -1205,11 +1222,21 @@ function update(elapsed, delta) {
             born: elapsed,
             active: true,
             laserAngle: 0,
+            moveAxis: index === 1 ? 'horizontal' : 'vertical',
+            movePhase: index * Math.PI * 0.7,
+            moveRange: 72,
+            moveSpeed: 1.4,
+            homeX: trap.x + (index - 1) * 28,
+            homeY: trap.y + 24,
           })
+        }
+        if (onlineMode) {
+          trap.active = false
+          return
         }
       }
       if (trap.type === 'wolf-laser') {
-        trap.laserAngle += 0.9 * delta
+        trap.laserAngle += (0.9 + difficultyLevel * 0.18) * delta
       } else if (trap.type === 'bird-net') {
         trap.x += Math.cos(elapsed * 1.15 + trap.phase) * 7 * delta
         trap.y += Math.sin(elapsed * 0.9 + trap.phase) * 7 * delta
@@ -1217,6 +1244,36 @@ function update(elapsed, delta) {
         trap.orbitAngle += trap.orbitSpeed * delta
         trap.x = trap.homeX + Math.cos(trap.orbitAngle) * trap.orbitRadius
         trap.y = trap.homeY + Math.sin(trap.orbitAngle) * trap.orbitRadius
+        trap.throwCooldown = (trap.throwCooldown ?? 2.5) - delta
+        if (trap.throwCooldown <= 0) {
+          const throwAngle = Math.atan2(player.y - trap.y, player.x - trap.x)
+          const throwSpeed = 180 + difficultyLevel * 35
+          traps.push({
+            type: 'thrown-hammer',
+            x: trap.x,
+            y: trap.y,
+            radius: 15,
+            born: elapsed,
+            active: true,
+            laserAngle: throwAngle,
+            vx: Math.cos(throwAngle) * throwSpeed,
+            vy: Math.sin(throwAngle) * throwSpeed,
+          })
+          trap.throwCooldown = Math.max(1.8, 4.2 - difficultyLevel * 0.35)
+        }
+      } else if (trap.type === 'thrown-hammer') {
+        trap.x += trap.vx * delta
+        trap.y += trap.vy * delta
+        if (trap.x < arena.left - 40 || trap.x > arena.right + 40 || trap.y < arena.top - 40 || trap.y > arena.bottom + 40) {
+          trap.active = false
+        }
+      } else if (trap.type === 'mini-zombie') {
+        const approach = Math.min(1, delta * (0.08 + difficultyLevel * 0.018))
+        trap.homeX += (player.x - trap.homeX) * approach
+        trap.homeY += (player.y - trap.homeY) * approach
+        const movement = Math.sin((elapsed - trap.born) * trap.moveSpeed + trap.movePhase) * (trap.moveRange + difficultyLevel * 18)
+        trap.x = trap.moveAxis === 'horizontal' ? trap.homeX + movement : trap.homeX
+        trap.y = trap.moveAxis === 'vertical' ? trap.homeY + movement : trap.homeY
       } else if (trap.type === 'zombie-echo') {
         const echoTime = Math.max(0, elapsed - trap.memoryDelay)
         const remembered = history.reduce((closest, point) => Math.abs(point.time - echoTime) < Math.abs(closest.time - echoTime) ? point : closest, history[0])
@@ -1289,7 +1346,7 @@ function detectCollisions(elapsed) {
         }
       } else if (Math.hypot(player.x - trap.x, player.y - trap.y) < trap.radius + playerRadius) {
         burst(player.x, player.y, trap.type === 'zombie-echo' ? '#8dff70' : '#ff8a65', elapsed)
-        endRun(elapsed, trap.type === 'axe' ? 'EL HACHA TE ENCONTRO.' : trap.type === 'bird-net' ? 'CAISTE EN LA TRAMPA DEL PAJARO.' : trap.type === 'mini-zombie' ? 'UN ZOMBI PEQUENO TE ALCANZO.' : 'TU ECO ZOMBI TE ALCANZO.')
+        endRun(elapsed, trap.type === 'axe' ? 'EL HACHA TE ENCONTRO.' : trap.type === 'thrown-hammer' ? 'EL MARTILLO TE GOLPEO.' : trap.type === 'bird-net' ? 'CAISTE EN LA TRAMPA DEL PAJARO.' : trap.type === 'mini-zombie' ? 'UN ZOMBI PEQUENO TE ALCANZO.' : 'TU ECO ZOMBI TE ALCANZO.')
         return
       }
       continue
@@ -1365,7 +1422,7 @@ function draw(elapsed) {
   visibleTraps.forEach((trap) => {
     if (onlineMode || trap.type) {
       if (!trap.active) return
-      const color = trap.type === 'wolf-laser' ? '#ff304f' : trap.type === 'zombie-echo' ? '#8dff70' : trap.type === 'axe' ? '#f7c66b' : '#d7ff63'
+      const color = trap.type === 'wolf-laser' ? '#ff304f' : trap.type === 'zombie-echo' ? '#8dff70' : trap.type === 'axe' || trap.type === 'thrown-hammer' ? '#f7c66b' : '#d7ff63'
       context.globalAlpha = 0.82
       context.fillStyle = color
       context.strokeStyle = color
@@ -1384,6 +1441,14 @@ function draw(elapsed) {
         context.rotate(trap.orbitAngle || Math.atan2((opponent?.y || player.y) - trap.y, (opponent?.x || player.x) - trap.x))
         context.fillRect(-12, -2, 24, 4)
         context.fillRect(5, -9, 8, 18)
+        context.restore()
+      } else if (trap.type === 'thrown-hammer') {
+        context.save()
+        context.translate(trap.x, trap.y)
+        context.rotate(trap.laserAngle)
+        context.fillStyle = '#f7c66b'
+        context.fillRect(-14, -3, 22, 6)
+        context.fillRect(5, -10, 9, 20)
         context.restore()
       } else if (trap.type === 'mini-zombie' || trap.type === 'zombie-echo') {
         drawTrapCharacter(trap.x, trap.y, 'zombie', elapsed, trap.type === 'zombie-echo' ? 0.72 : 1)
@@ -1681,6 +1746,14 @@ function showSpectatorScreen(reason) {
 
 function endRun(elapsed, reason = 'Tu pasado te encontró.') {
   if (onlineMode && !onlinePlayerAlive) return
+  if (lives > 1) {
+    lives -= 1
+    livesElement.textContent = lives
+    powerGraceUntil = elapsed + 2.5
+    idleFor = 0
+    updatePeerRoomDisplay(onlineMode ? 'VIDA PERDIDA · CONTINUA EN LA ARENA' : 'VIDA PERDIDA · TE QUEDA 1')
+    return
+  }
   if (onlineMode && !onlineMatchEnded) {
     onlinePlayerAlive = false
     sendMatchResult('defeated')
