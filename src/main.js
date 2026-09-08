@@ -1,4 +1,5 @@
 import './style.css'
+import Peer from 'peerjs'
 
 document.querySelector('#app').innerHTML = `
   <main class="shell">
@@ -27,7 +28,12 @@ document.querySelector('#app').innerHTML = `
         <p>Tu nombre aparecerá en el lobby mientras buscas rival.</p>
         <label for="nickname-input">APODO</label>
         <input id="nickname-input" name="nickname" maxlength="16" autocomplete="nickname" placeholder="Ej. Echo_01" required />
-        <button class="primary-button" type="submit"><span>ENTRAR AL LOBBY</span><span>→</span></button>
+        <button class="primary-button" type="submit"><span>CREAR SALA</span><span>→</span></button>
+        <div class="join-divider"><span>O ÚNETE A UNA SALA</span></div>
+        <div class="join-row">
+          <input id="room-code-input" maxlength="40" autocomplete="off" placeholder="Código de sala" />
+          <button class="ghost-button" id="join-room-button" type="button">UNIRME</button>
+        </div>
       </form>
     </div>
 
@@ -80,6 +86,8 @@ const playOnlineButton = document.querySelector('#play-online-button')
 const nicknameOverlay = document.querySelector('#nickname-overlay')
 const nicknameForm = document.querySelector('#nickname-form')
 const nicknameInput = document.querySelector('#nickname-input')
+const roomCodeInput = document.querySelector('#room-code-input')
+const joinRoomButton = document.querySelector('#join-room-button')
 
 let secretClickCount = 0
 let secretTimer = null
@@ -93,6 +101,10 @@ let lastOnlineBroadcast = 0
 let onlinePeers = new Map()
 let onlineLobbyActive = false
 let presenceInterval = null
+let peer = null
+let peerConnection = null
+let peerRoomCode = ''
+let peerIsConnected = false
 const onlineChannel = 'BroadcastChannel' in window ? new BroadcastChannel('echo-loop-live-arena') : null
 const presenceKeyPrefix = 'echo-loop-online-player-'
 
@@ -144,6 +156,69 @@ function updateOnlinePlayersDisplay() {
   const currentName = localStorage.getItem('echo-loop-player-name') || 'JUGADOR'
   const players = [{ name: currentName, label: 'JUGADOR 1' }, ...Array.from(onlinePeers.values()).map((peer) => ({ name: peer.name, label: 'JUGADOR 2' }))]
   list.innerHTML = players.slice(0, 2).map((player) => `<div class="online-player"><span class="player-status"></span><strong>${escapeHtml(player.name)}</strong><small>${player.label}</small></div>`).join('')
+}
+
+function updatePeerRoomDisplay(message = 'ESPERANDO CONEXIÓN P2P') {
+  const code = document.querySelector('#online-room-code')
+  const status = document.querySelector('#online-connection-status')
+  if (code) code.textContent = peerRoomCode || 'GENERANDO...'
+  if (status) status.textContent = message
+}
+
+function startPeerMatch() {
+  if (peerIsConnected || onlineMode) return
+  peerIsConnected = true
+  onlineMode = true
+  onlineMatchActive = true
+  onlineCountdown = 60
+  if (presenceInterval) clearInterval(presenceInterval)
+  startRun()
+}
+
+function attachPeerConnection(connection, name) {
+  peerConnection = connection
+  connection.on('open', () => {
+    peerIsConnected = true
+    connection.send({ type: 'player-info', name })
+    updatePeerRoomDisplay('RIVAL CONECTADO')
+    startPeerMatch()
+  })
+  connection.on('data', (message) => {
+    if (!message || message.type !== 'player-state') return
+    opponent = { id: connection.peer, name: message.name || 'RIVAL', x: message.x, y: message.y, lastSeen: performance.now() }
+    onlinePeers.set(connection.peer, { id: connection.peer, name: opponent.name, lastSeen: performance.now() })
+    updateOnlinePlayersDisplay()
+  })
+  connection.on('close', () => {
+    peerIsConnected = false
+    peerConnection = null
+    opponent = null
+    updatePeerRoomDisplay('RIVAL DESCONECTADO')
+  })
+  connection.on('error', () => updatePeerRoomDisplay('ERROR DE CONEXIÓN'))
+}
+
+function createPeerRoom(name) {
+  if (peer) peer.destroy()
+  peer = new Peer(undefined, { debug: 0 })
+  peer.on('open', (id) => {
+    peerRoomCode = id
+    updatePeerRoomDisplay('COMPARTE ESTE CÓDIGO')
+    broadcastPresence(name)
+  })
+  peer.on('connection', (connection) => attachPeerConnection(connection, name))
+  peer.on('error', () => updatePeerRoomDisplay('NO SE PUDO CREAR LA SALA'))
+}
+
+function joinPeerRoom(name, roomCode) {
+  if (peer) peer.destroy()
+  peer = new Peer(undefined, { debug: 0 })
+  peer.on('open', () => {
+    const connection = peer.connect(roomCode.trim(), { reliable: true })
+    attachPeerConnection(connection, name)
+    updatePeerRoomDisplay('CONECTANDO CON LA SALA')
+  })
+  peer.on('error', () => updatePeerRoomDisplay('CÓDIGO INVÁLIDO O SALA CERRADA'))
 }
 
 function getOnlineRoomState() {
@@ -199,6 +274,10 @@ function renderOnlineWaitingState(name) {
           <div class="timer-box"><span>PREP</span><strong id="online-timer">60</strong></div>
         </div>
       </section>
+      <section class="room-panel">
+        <div><span class="eyebrow">SALA P2P GRATUITA</span><strong id="online-room-code">GENERANDO...</strong></div>
+        <span id="online-connection-status">ESPERANDO CONEXIÓN P2P</span>
+      </section>
       <section class="game-wrap online-match-wrap">
         <canvas id="game" aria-label="Arena de preparación online."></canvas>
       </section>
@@ -249,15 +328,7 @@ function renderOnlineWaitingState(name) {
   if (presenceInterval) clearInterval(presenceInterval)
   presenceInterval = setInterval(() => broadcastPresence(playerName), 1000)
   updateOnlinePlayersDisplay()
-  if (onlineChannel && onlinePeers.size > 0) {
-    onlineLobbyActive = false
-    clearInterval(presenceInterval)
-    onlineMode = true
-    onlineMatchActive = true
-    onlineCountdown = 60
-    startRun()
-    return
-  }
+  onlineLobbyActive = false
   const interval = setInterval(() => {
     const state = registerOnlinePlayer(playerName)
     const playersReady = onlineChannel ? onlinePeers.size >= 1 : state.players.length >= 2
@@ -291,15 +362,15 @@ function renderOnlineWaitingState(name) {
 }
 
 function startOnlineArena(name) {
-  const room = registerOnlinePlayer(name || localStorage.getItem('echo-loop-player-name') || 'JUGADOR')
-  if (!onlineChannel && room.players.length >= 2) {
-    onlineMode = true
-    onlineCountdown = 60
-    onlineMatchActive = true
-    startRun()
-    return
-  }
+  const playerName = name || localStorage.getItem('echo-loop-player-name') || 'JUGADOR'
   renderOnlineWaitingState(name)
+  createPeerRoom(playerName)
+}
+
+function startOnlineJoin(name, roomCode) {
+  const playerName = name || localStorage.getItem('echo-loop-player-name') || 'JUGADOR'
+  renderOnlineWaitingState(playerName)
+  joinPeerRoom(playerName, roomCode)
 }
 
 function renderSecretPage() {
@@ -539,6 +610,14 @@ nicknameForm.addEventListener('submit', (event) => {
   startOnlineArena(name)
 })
 
+joinRoomButton.addEventListener('click', () => {
+  const name = nicknameInput.value.trim().replace(/\s+/g, ' ').slice(0, 16)
+  const roomCode = roomCodeInput.value.trim()
+  if (!name || !roomCode) return
+  nicknameOverlay.hidden = true
+  startOnlineJoin(name, roomCode)
+})
+
 const delay = 5
 const playerRadius = 10
 const powers = [
@@ -730,8 +809,10 @@ function update(elapsed, delta) {
   const previousY = player.y
   player.x += (player.targetX - player.x) * smoothing
   player.y += (player.targetY - player.y) * smoothing
-  if (onlineMode && onlineChannel && performance.now() - lastOnlineBroadcast > 50) {
-    onlineChannel.postMessage({ type: 'player-state', id: localPlayerId, name: localStorage.getItem('echo-loop-player-name') || 'JUGADOR', x: player.x, y: player.y })
+  if (onlineMode && performance.now() - lastOnlineBroadcast > 50) {
+    const state = { type: 'player-state', id: localPlayerId, name: localStorage.getItem('echo-loop-player-name') || 'JUGADOR', x: player.x, y: player.y }
+    if (onlineChannel) onlineChannel.postMessage(state)
+    if (peerConnection?.open) peerConnection.send(state)
     lastOnlineBroadcast = performance.now()
   }
   if (Math.hypot(player.x - previousX, player.y - previousY) < 0.45) idleFor += delta

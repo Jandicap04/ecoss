@@ -113,6 +113,11 @@ button { font: inherit; }
   font: 14px 'DM Mono', monospace;
 }
 .nickname-card input:focus { border-color: var(--acid); box-shadow: 0 0 0 3px rgba(215, 255, 99, .1); }
+.join-divider { display: flex; align-items: center; gap: 10px; margin: 20px 0 10px; color: var(--muted); font: 9px 'DM Mono', monospace; letter-spacing: 1px; }
+.join-divider::before, .join-divider::after { content: ''; height: 1px; flex: 1; background: var(--line); }
+.join-row { display: flex; gap: 8px; }
+.join-row input { margin: 0; min-width: 0; }
+.join-row .ghost-button { white-space: nowrap; }
 .online-players { display: flex; gap: 8px; flex-wrap: wrap; }
 .online-player { min-width: 140px; padding: 10px 12px; border: 1px solid var(--line); background: rgba(215, 255, 99, .04); }
 .online-player strong, .online-player small { display: block; }
@@ -120,6 +125,9 @@ button { font: inherit; }
 .online-player small { color: var(--muted); font: 9px 'DM Mono', monospace; letter-spacing: 1px; }
 .player-status { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--acid); box-shadow: 0 0 10px var(--acid); }
 .online-panel .lobby-actions { justify-content: flex-end; }
+.room-panel { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 10px; padding: 12px 16px; border: 1px solid var(--line); background: rgba(7, 16, 22, .7); }
+.room-panel strong { display: block; margin-top: 5px; color: var(--ink); font: 500 15px 'DM Mono', monospace; letter-spacing: 1px; }
+.room-panel > span { color: var(--muted); font: 10px 'DM Mono', monospace; letter-spacing: 1px; }
 
 
 .secret-shell {
