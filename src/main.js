@@ -111,6 +111,9 @@ let onlineSelectedTrap = 'bird-net'
 let onlineSetupTraps = []
 let onlineSetupTimer = null
 let onlineSetupDraw = null
+let onlinePlayerAlive = true
+let onlineOpponentAlive = true
+let onlineMatchEnded = false
 const onlineChannel = 'BroadcastChannel' in window ? new BroadcastChannel('echo-loop-live-arena') : null
 const presenceKeyPrefix = 'echo-loop-online-player-'
 
@@ -137,7 +140,7 @@ if (onlineChannel) {
       return
     }
     if (state.type !== 'player-state') return
-    opponent = { id: state.id, name: state.name || 'RIVAL', skin: state.skin || 'retro', x: state.x, y: state.y, lastSeen: performance.now() }
+    opponent = { id: state.id, name: state.name || 'RIVAL', skin: state.skin || 'retro', x: state.x, y: state.y, elapsed: state.elapsed || 0, lastSeen: performance.now() }
   })
 }
 
@@ -171,8 +174,14 @@ function updatePeerRoomDisplay(message = 'ESPERANDO CONEXIÓN P2P') {
   if (status) status.textContent = message
 }
 
+function sendMatchResult(result) {
+  const message = { type: 'match-result', result, elapsed: elapsedTime }
+  if (peerConnection?.open) peerConnection.send(message)
+  if (onlineChannel) onlineChannel.postMessage({ ...message, id: localPlayerId })
+}
+
 function startPeerMatch() {
-  if (peerIsConnected || onlineSetupActive || onlineMode) return
+  if (onlineSetupActive || onlineMode) return
   peerIsConnected = true
   if (presenceInterval) clearInterval(presenceInterval)
   showOnlineTrapSetup()
@@ -240,7 +249,7 @@ function attachPeerConnection(connection, name) {
   })
   connection.on('data', (message) => {
     if (!message || message.type !== 'player-state') return
-    opponent = { id: connection.peer, name: message.name || 'RIVAL', skin: message.skin || 'retro', x: message.x, y: message.y, lastSeen: performance.now() }
+    opponent = { id: connection.peer, name: message.name || 'RIVAL', skin: message.skin || 'retro', x: message.x, y: message.y, elapsed: message.elapsed || 0, lastSeen: performance.now() }
     if (Array.isArray(message.traps)) remoteTraps = message.traps
     onlinePeers.set(connection.peer, { id: connection.peer, name: opponent.name, lastSeen: performance.now() })
     updateOnlinePlayersDisplay()
@@ -413,6 +422,9 @@ function renderOnlineWaitingState(name) {
         clearInterval(interval)
         onlineMode = true
         onlineMatchActive = true
+        onlinePlayerAlive = true
+        onlineOpponentAlive = true
+        onlineMatchEnded = false
         onlineCountdown = 0
         startRun()
       }
@@ -899,7 +911,7 @@ function update(elapsed, delta) {
   player.x += (player.targetX - player.x) * smoothing
   player.y += (player.targetY - player.y) * smoothing
   if (onlineMode && performance.now() - lastOnlineBroadcast > 50) {
-    const state = { type: 'player-state', id: localPlayerId, name: localStorage.getItem('echo-loop-player-name') || 'JUGADOR', skin: selectedSkin, x: player.x, y: player.y, traps: onlineMode ? traps.map(({ type, x, y, radius, born, laserAngle, active }) => ({ type, x, y, radius, born, laserAngle, active })) : [] }
+    const state = { type: 'player-state', id: localPlayerId, name: localStorage.getItem('echo-loop-player-name') || 'JUGADOR', skin: selectedSkin, x: player.x, y: player.y, elapsed, traps: onlineMode ? traps.map(({ type, x, y, radius, born, laserAngle, active }) => ({ type, x, y, radius, born, laserAngle, active })) : [] }
     if (onlineChannel) onlineChannel.postMessage(state)
     if (peerConnection?.open) peerConnection.send(state)
     lastOnlineBroadcast = performance.now()
@@ -926,10 +938,11 @@ function update(elapsed, delta) {
   if (elapsed >= nextDecoyAt) {
     echoes.push({
       born: elapsed,
-      color: '#ff5f56',
+      color: '#7dbb54',
       drift: (Math.random() - 0.5) * (26 + difficulty * 8),
       phase: Math.random() * Math.PI * 2,
       isDecoy: true,
+      skin: onlineMode ? 'zombie' : null,
       x: arena.left + 20 + Math.random() * Math.max(20, arena.right - arena.left - 40),
       y: arena.top + 20 + Math.random() * Math.max(20, arena.bottom - arena.top - 40),
       speed: 62 + difficulty * 12,
@@ -978,13 +991,39 @@ function update(elapsed, delta) {
     if (onlineMode) {
       if (elapsed < trap.born) return
       trap.active = true
+      if (trap.type === 'wolf-laser' && elapsed - trap.born > 10) {
+        trap.type = 'axe'
+        trap.homeX = trap.x
+        trap.homeY = trap.y
+        trap.phase = 0
+        trap.speed = 180
+        trap.laserAngle = 0
+      }
+      if (trap.type === 'bird-net' && !trap.spawned && elapsed - trap.born > 3) {
+        trap.spawned = true
+        for (let index = 0; index < 3; index += 1) {
+          traps.push({
+            type: 'mini-zombie',
+            x: trap.x + (index - 1) * 28,
+            y: trap.y + 24,
+            radius: 13,
+            born: elapsed,
+            active: true,
+            laserAngle: 0,
+          })
+        }
+      }
       if (trap.type === 'wolf-laser') {
         trap.laserAngle += trap.laserSpeed * delta
       } else if (trap.type === 'bird-net') {
         trap.x += Math.cos(elapsed * 1.7 + trap.phase) * 12 * delta
         trap.y += Math.sin(elapsed * 1.3 + trap.phase) * 12 * delta
       } else if (trap.type === 'axe') {
-        const angle = Math.atan2((opponent?.y || player.y) - trap.y, (opponent?.x || player.x) - trap.x)
+        const targetX = trap.phase === 0 ? (opponent?.x || player.x) : trap.homeX
+        const targetY = trap.phase === 0 ? (opponent?.y || player.y) : trap.homeY
+        const distance = Math.hypot(targetX - trap.x, targetY - trap.y)
+        if (distance < 12) trap.phase = trap.phase === 0 ? 1 : 0
+        const angle = Math.atan2(targetY - trap.y, targetX - trap.x)
         trap.x += Math.cos(angle) * trap.speed * delta
         trap.y += Math.sin(angle) * trap.speed * delta
       } else if (trap.type === 'zombie-echo') {
@@ -995,8 +1034,10 @@ function update(elapsed, delta) {
           trap.y += (remembered.y - trap.y) * delta * 2
         }
       }
-      trap.x = Math.max(arena.left + 16, Math.min(arena.right - 16, trap.x))
-      trap.y = Math.max(arena.top + 16, Math.min(arena.bottom - 16, trap.y))
+      if (trap.type !== 'mini-zombie') {
+        trap.x = Math.max(arena.left + 16, Math.min(arena.right - 16, trap.x))
+        trap.y = Math.max(arena.top + 16, Math.min(arena.bottom - 16, trap.y))
+      }
       return
     }
     const cycle = Math.floor((elapsed - trap.born) / 4) % 2
@@ -1016,6 +1057,22 @@ function update(elapsed, delta) {
     particle.y += particle.vy * delta
   })
   detectCollisions(elapsed)
+  detectOnlineCombat(elapsed)
+
+  function detectOnlineCombat(elapsed) {
+    if (!onlineMode || !opponent || !onlinePlayerAlive || onlineMatchEnded) return
+    if (Math.hypot(player.x - opponent.x, player.y - opponent.y) < playerRadius * 2.3) {
+      const attackerWins = elapsed >= Number(opponent.elapsed || 0)
+      if (attackerWins) {
+        sendMatchResult('defeated')
+        onlinePlayerAlive = false
+        endRun(elapsed, 'EL RIVAL TE DERRIBO.')
+      } else {
+        sendMatchResult('defeated')
+        showWinScreen()
+      }
+    }
+  }
   timeElement.textContent = elapsed.toFixed(1).padStart(4, '0')
 
   if (!onlineMode && elapsed >= nextPowerAt && !powerPanel.dataset.shown) showPowerChoice()
@@ -1038,7 +1095,7 @@ function detectCollisions(elapsed) {
         }
       } else if (Math.hypot(player.x - trap.x, player.y - trap.y) < trap.radius + playerRadius) {
         burst(player.x, player.y, trap.type === 'zombie-echo' ? '#8dff70' : '#ff8a65', elapsed)
-        endRun(elapsed, trap.type === 'axe' ? 'EL HACHA TE ENCONTRO.' : trap.type === 'bird-net' ? 'CAISTE EN LA TRAMPA DEL PAJARO.' : 'TU ECO ZOMBI TE ALCANZO.')
+        endRun(elapsed, trap.type === 'axe' ? 'EL HACHA TE ENCONTRO.' : trap.type === 'bird-net' ? 'CAISTE EN LA TRAMPA DEL PAJARO.' : trap.type === 'mini-zombie' ? 'UN ZOMBI PEQUENO TE ALCANZO.' : 'TU ECO ZOMBI TE ALCANZO.')
         return
       }
       continue
@@ -1125,7 +1182,7 @@ function draw(elapsed) {
         context.moveTo(trap.x, trap.y)
         context.lineTo(trap.x + Math.cos(trap.laserAngle) * laserLength, trap.y + Math.sin(trap.laserAngle) * laserLength)
         context.stroke()
-        context.fillText('LOBO', trap.x, trap.y - 16)
+        drawTrapCharacter(trap.x, trap.y, 'wolf', elapsed)
       } else if (trap.type === 'axe') {
         context.save()
         context.translate(trap.x, trap.y)
@@ -1133,6 +1190,8 @@ function draw(elapsed) {
         context.fillRect(-12, -2, 24, 4)
         context.fillRect(5, -9, 8, 18)
         context.restore()
+      } else if (trap.type === 'mini-zombie' || trap.type === 'zombie-echo') {
+        drawTrapCharacter(trap.x, trap.y, 'zombie', elapsed, trap.type === 'zombie-echo' ? 0.72 : 1)
       } else {
         context.beginPath()
         context.arc(trap.x, trap.y, trap.radius, 0, Math.PI * 2)
@@ -1168,7 +1227,10 @@ function draw(elapsed) {
     context.beginPath(); context.arc(point.x, point.y, 2.5, 0, Math.PI * 2); context.fill()
   })
   context.globalAlpha = 1
-  echoes.forEach((echo) => drawCircle(echo.x, echo.y, 9, echo.color, true))
+  echoes.forEach((echo) => {
+    if (onlineMode && echo.skin === 'zombie') drawCharacter(echo.x, echo.y, skins.find((skin) => skin.character === 'zombie') || skins[5], elapsed, true)
+    else drawCircle(echo.x, echo.y, 9, echo.color, true)
+  })
   particles.forEach((particle) => drawCircle(particle.x, particle.y, 2, particle.color, false))
   if (onlineMode && opponent && performance.now() - opponent.lastSeen < 3000) {
     drawCharacter(opponent.x, opponent.y, skins.find((skin) => skin.id === opponent.skin) || skins[0], elapsed, true)
@@ -1193,77 +1255,75 @@ function drawPlayer(elapsed) {
   drawCharacter(player.x, player.y, skin, elapsed, false)
 }
 
+function drawTrapCharacter(x, y, character, elapsed, opacity = 1) {
+  const skin = skins.find((item) => item.character === character) || skins[0]
+  drawCharacter(x, y, skin, elapsed, opacity < 1)
+  context.save()
+  context.globalAlpha = opacity
+  if (character === 'wolf') {
+    context.fillStyle = '#ff304f'
+    context.shadowBlur = 9
+    context.shadowColor = '#ff304f'
+    context.fillRect(x - 5, y - 13, 3, 3)
+    context.fillRect(x + 3, y - 13, 3, 3)
+  }
+  context.restore()
+}
+
 function drawCharacter(x, y, skin, elapsed, ghost) {
-  const alpha = ghost ? 0.68 : 1
+  const alpha = ghost ? 0.62 : 1
+  const scale = ghost ? 0.86 : 1
+  const bodyWidth = 13 * scale
+  const bodyHeight = 16 * scale
+  const headRadius = 7 * scale
   context.save()
   context.globalAlpha = alpha
-  context.shadowBlur = ghost ? 12 : 22
+  context.shadowBlur = ghost ? 14 : 26
   context.shadowColor = skin.edge
-  context.fillStyle = skin.core
-  context.strokeStyle = skin.edge
-  context.lineWidth = 2
-  context.fillRect(x - 7, y - 3, 14, 13)
-  context.fillStyle = skin.edge
-  context.fillRect(x - 6, y - 15, 12, 11)
-  context.fillStyle = skin.core
-  context.fillRect(x - 10, y + 9, 7, 9)
-  context.fillRect(x + 3, y + 9, 7, 9)
+  context.fillStyle = '#101820'
+  context.beginPath(); context.ellipse(x, y + 18 * scale, 16 * scale, 4 * scale, 0, 0, Math.PI * 2); context.fill()
   context.shadowBlur = 0
-  if (skin.character === 'engineer' || skin.character === 'speed') {
-    context.fillStyle = skin.edge
-    context.fillRect(x - 9, y - 18, 18, 4)
-    context.fillRect(x - 6, y - 21, 12, 3)
+  context.lineWidth = 1.6 * scale
+  context.strokeStyle = '#050b0f'
+  context.fillStyle = skin.core
+  context.beginPath(); context.roundRect(x - bodyWidth / 2, y - 2 * scale, bodyWidth, bodyHeight, 3 * scale); context.fill(); context.stroke()
+  context.fillStyle = skin.edge
+  context.beginPath(); context.arc(x, y - 10 * scale, headRadius, 0, Math.PI * 2); context.fill(); context.stroke()
+  context.fillStyle = '#18212a'
+  context.beginPath(); context.arc(x - 2.5 * scale, y - 11 * scale, 1.2 * scale, 0, Math.PI * 2); context.fill()
+  context.beginPath(); context.arc(x + 2.5 * scale, y - 11 * scale, 1.2 * scale, 0, Math.PI * 2); context.fill()
+  context.fillStyle = skin.core
+  context.beginPath(); context.roundRect(x - 8 * scale, y + 11 * scale, 6 * scale, 10 * scale, 2 * scale); context.fill(); context.stroke()
+  context.beginPath(); context.roundRect(x + 2 * scale, y + 11 * scale, 6 * scale, 10 * scale, 2 * scale); context.fill(); context.stroke()
+  context.strokeStyle = skin.edge
+  context.beginPath(); context.moveTo(x - 7 * scale, y + 3 * scale); context.lineTo(x - 13 * scale, y + 8 * scale); context.moveTo(x + 7 * scale, y + 3 * scale); context.lineTo(x + 13 * scale, y + 8 * scale); context.stroke()
+  context.strokeStyle = '#050b0f'
+  if (skin.character === 'engineer' || skin.character === 'speed' || skin.character === 'robot') {
+    context.fillStyle = skin.edge; context.beginPath(); context.roundRect(x - 10 * scale, y - 18 * scale, 20 * scale, 5 * scale, 2 * scale); context.fill(); context.stroke()
+    context.fillRect(x - 6 * scale, y - 21 * scale, 12 * scale, 3 * scale)
   } else if (skin.character === 'zombie' || skin.character === 'toxic') {
-    context.fillStyle = '#78b34d'
-    context.fillRect(x - 5, y - 12, 3, 3)
-    context.fillRect(x + 3, y - 12, 3, 3)
-  } else if (skin.character === 'bird') {
-    context.fillStyle = skin.edge
-    context.beginPath(); context.moveTo(x + 6, y - 7); context.lineTo(x + 15, y - 12); context.lineTo(x + 8, y - 2); context.fill()
+    context.fillStyle = '#78b34d'; context.beginPath(); context.arc(x, y - 10 * scale, headRadius, 0, Math.PI * 2); context.fill(); context.stroke()
+    context.fillStyle = '#eaffb0'; context.fillRect(x - 4 * scale, y - 12 * scale, 2 * scale, 2 * scale); context.fillRect(x + 2 * scale, y - 12 * scale, 2 * scale, 2 * scale)
+  } else if (skin.character === 'bird' || skin.character === 'pilot') {
+    context.fillStyle = skin.edge; context.beginPath(); context.moveTo(x + 5 * scale, y - 7 * scale); context.lineTo(x + 17 * scale, y - 13 * scale); context.lineTo(x + 8 * scale, y - 1 * scale); context.fill(); context.stroke()
   } else if (skin.character === 'wolf') {
-    context.beginPath(); context.moveTo(x - 8, y - 14); context.lineTo(x - 5, y - 22); context.lineTo(x, y - 15); context.lineTo(x + 6, y - 22); context.lineTo(x + 9, y - 14); context.stroke()
-  } else if (skin.character === 'axe') {
-    context.fillStyle = skin.edge
-    context.fillRect(x + 9, y - 7, 3, 18)
-    context.fillRect(x + 10, y - 9, 7, 5)
-  } else if (skin.character === 'ninja') {
-    context.fillStyle = '#050b0f'
-    context.fillRect(x - 7, y - 10, 14, 4)
-  } else if (skin.character === 'commander') {
-    context.strokeStyle = skin.edge
-    context.beginPath(); context.arc(x, y, 18 + Math.sin(elapsed * 3), 0, Math.PI * 2); context.stroke()
-  } else if (skin.character === 'sniper') {
-    context.strokeStyle = skin.edge
-    context.beginPath(); context.moveTo(x + 7, y - 2); context.lineTo(x + 18, y - 6); context.stroke()
-    context.fillRect(x + 14, y - 8, 5, 3)
+    context.beginPath(); context.moveTo(x - 8 * scale, y - 14 * scale); context.lineTo(x - 6 * scale, y - 23 * scale); context.lineTo(x, y - 16 * scale); context.lineTo(x + 6 * scale, y - 23 * scale); context.lineTo(x + 8 * scale, y - 14 * scale); context.stroke()
+  } else if (skin.character === 'axe' || skin.character === 'samurai') {
+    context.strokeStyle = skin.edge; context.lineWidth = 2 * scale; context.beginPath(); context.moveTo(x + 9 * scale, y - 7 * scale); context.lineTo(x + 19 * scale, y - 19 * scale); context.stroke()
+    context.fillStyle = skin.edge; context.fillRect(x + 14 * scale, y - 21 * scale, 7 * scale, 5 * scale)
+  } else if (skin.character === 'sniper' || skin.character === 'commando') {
+    context.strokeStyle = skin.edge; context.beginPath(); context.moveTo(x + 7 * scale, y); context.lineTo(x + 22 * scale, y - 7 * scale); context.stroke(); context.fillStyle = skin.edge; context.fillRect(x + 17 * scale, y - 9 * scale, 6 * scale, 3 * scale)
   } else if (skin.character === 'heavy') {
-    context.strokeStyle = skin.edge
-    context.strokeRect(x - 11, y - 17, 22, 28)
-  } else if (skin.character === 'pilot') {
-    context.fillStyle = skin.edge
-    context.fillRect(x - 12, y - 4, 5, 3)
-    context.fillRect(x + 7, y - 4, 5, 3)
-  } else if (skin.character === 'samurai') {
-    context.strokeStyle = skin.edge
-    context.beginPath(); context.moveTo(x + 8, y - 15); context.lineTo(x + 18, y - 22); context.stroke()
-  } else if (skin.character === 'robot') {
-    context.strokeStyle = skin.edge
-    context.strokeRect(x - 8, y - 15, 16, 12)
-    context.fillStyle = skin.edge
-    context.fillRect(x - 4, y - 11, 2, 2)
-    context.fillRect(x + 2, y - 11, 2, 2)
-  } else if (skin.character === 'commando') {
-    context.fillStyle = skin.edge
-    context.fillRect(x - 10, y - 18, 20, 4)
-    context.fillRect(x + 9, y - 10, 8, 3)
-  } else if (skin.character === 'shadow') {
-    context.globalAlpha = alpha * 0.45
-    context.fillStyle = skin.edge
-    context.beginPath(); context.arc(x, y, 18, 0, Math.PI * 2); context.fill()
-  } else if (skin.character === 'boss') {
-    context.strokeStyle = skin.edge
-    context.lineWidth = 3
-    context.beginPath(); context.moveTo(x - 9, y - 16); context.lineTo(x - 4, y - 23); context.lineTo(x, y - 16); context.lineTo(x + 5, y - 23); context.lineTo(x + 10, y - 16); context.stroke()
+    context.strokeStyle = skin.edge; context.strokeRect(x - 12 * scale, y - 19 * scale, 24 * scale, 31 * scale)
+  } else if (skin.character === 'ninja' || skin.character === 'shadow') {
+    context.fillStyle = '#050b0f'; context.fillRect(x - 8 * scale, y - 12 * scale, 16 * scale, 4 * scale)
+  } else if (skin.character === 'commander' || skin.character === 'boss') {
+    context.strokeStyle = skin.edge; context.lineWidth = 2 * scale; context.beginPath(); context.moveTo(x - 9 * scale, y - 17 * scale); context.lineTo(x - 4 * scale, y - 24 * scale); context.lineTo(x, y - 17 * scale); context.lineTo(x + 5 * scale, y - 24 * scale); context.lineTo(x + 10 * scale, y - 17 * scale); context.stroke()
+  } else if (skin.character === 'medic') {
+    context.fillStyle = '#fff'; context.fillRect(x - 2 * scale, y - 17 * scale, 4 * scale, 10 * scale); context.fillRect(x - 5 * scale, y - 14 * scale, 10 * scale, 4 * scale)
+  }
+  if (skin.character === 'speed') {
+    context.strokeStyle = skin.edge; context.globalAlpha = alpha * 0.45; context.beginPath(); context.moveTo(x - 20 * scale, y + 4 * scale); context.lineTo(x - 10 * scale, y + 4 * scale); context.moveTo(x - 19 * scale, y + 10 * scale); context.lineTo(x - 9 * scale, y + 10 * scale); context.stroke()
   }
   context.restore()
 }
@@ -1380,7 +1440,24 @@ function showLossScreen() {
   }, 6000)
 }
 
+function showWinScreen() {
+  if (onlineMatchEnded) return
+  onlineMatchEnded = true
+  running = false
+  message.querySelector('.eyebrow').textContent = 'VICTORIA DE ARENA'
+  message.querySelector('h1').innerHTML = 'EL RIVAL<br><em>HA CAÍDO.</em>'
+  message.querySelector('p').textContent = `Sobreviviste ${elapsedTime.toFixed(1)} segundos. El ganador queda en pie.`
+  startButton.querySelector('span:first-child').textContent = 'VOLVER A JUGAR'
+  message.classList.remove('hidden')
+  playLossLaugh()
+}
+
 function endRun(elapsed, reason = 'Tu pasado te encontró.') {
+  if (onlineMode && !onlineMatchEnded) {
+    onlineMatchEnded = true
+    onlinePlayerAlive = false
+    sendMatchResult('defeated')
+  }
   running = false
   const earned = Math.floor(elapsed * (elapsed > 20 ? 2 : 1))
   currency += earned
