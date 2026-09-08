@@ -4,9 +4,23 @@ document.querySelector('#app').innerHTML = `
   <main class="shell">
     <header class="topbar">
       <div class="brand"><span class="brand-mark">◌</span><span>ECHO LOOP</span></div>
-      <div class="run-type"><span class="live-dot"></span><span id="mode-label">RUN 001</span></div>
-      <button class="icon-button" id="sound-button" aria-label="Activar o silenciar sonido">◒</button>
+      <div class="run-type"><span class="live-dot"></span><span id="mode-label">ARENA LIVE</span></div>
+      <div class="topbar-actions">
+        <button class="icon-button" id="sound-button" aria-label="Activar o silenciar sonido">◒</button>
+      </div>
     </header>
+
+    <section class="lobby-panel" aria-label="Lobby competitivo">
+      <div class="lobby-copy">
+        <span class="eyebrow">ONLINE COMPETITIVE</span>
+        <h2>FÚTBOL EN VIVO</h2>
+      </div>
+      <div class="lobby-actions">
+        <button class="primary-button" id="play-online-button" type="button"><span>LISTO PARA COMBATIR</span><span>→</span></button>
+        <button class="ghost-button" id="sim-button" type="button">JUGAR ONLINE</button>
+      </div>
+    </section>
+
     <section class="hud" aria-label="Estado de la partida">
       <div><span class="hud-label">TIEMPO</span><strong id="time">00.0</strong></div>
       <div class="hud-center"><span class="hud-label">RÉCORD</span><strong id="best">00.0</strong></div>
@@ -30,6 +44,10 @@ document.querySelector('#app').innerHTML = `
         <div class="power-grid" id="power-grid"></div>
       </div>
     </section>
+    <div class="loss-overlay" id="loss-overlay" hidden>
+      <img src="https://i.pinimg.com/736x/2c/80/35/2c80351220a2fb253ec5012caed56bd5.jpg" alt="Derrota" />
+      <div class="loss-overlay-label">SE ACABÓ LA RUN</div>
+    </div>
     <footer class="footer"><span>ARRASTRA PARA MOVERTE</span><span id="daily-label">MODO DIARIO · DISPONIBLE</span></footer>
   </main>
 `
@@ -45,8 +63,360 @@ const powerPanel = document.querySelector('#power-panel')
 const powerGrid = document.querySelector('#power-grid')
 const startButton = document.querySelector('#start-button')
 const soundButton = document.querySelector('#sound-button')
+const goldBallButton = document.querySelector('#gold-ball')
 const skinList = document.querySelector('#skin-list')
 const currencyElement = document.querySelector('#currency')
+const playOnlineButton = document.querySelector('#play-online-button')
+
+let secretClickCount = 0
+let secretTimer = null
+let onlineMatchActive = false
+let onlineCountdown = 60
+let onlineRoom = null
+let onlineMode = false
+
+function getOnlineRoomState() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('echo-loop-online-room') || '{"players":[],"updatedAt":0}')
+    return {
+      players: Array.isArray(stored.players) ? stored.players : [],
+      updatedAt: Number(stored.updatedAt || 0),
+      startedAt: Number(stored.startedAt || 0),
+    }
+  } catch {
+    return { players: [], updatedAt: 0, startedAt: 0 }
+  }
+}
+
+function registerOnlinePlayer() {
+  const room = getOnlineRoomState()
+  const playerId = localStorage.getItem('echo-loop-player-id') || `player-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  localStorage.setItem('echo-loop-player-id', playerId)
+  const players = Array.from(new Set([...(room.players || []), playerId])).slice(-2)
+  const nextRoom = { players, updatedAt: Date.now(), startedAt: players.length >= 2 ? Date.now() + 60000 : 0 }
+  localStorage.setItem('echo-loop-online-room', JSON.stringify(nextRoom))
+  return nextRoom
+}
+
+function renderOnlineWaitingState() {
+  const room = registerOnlinePlayer()
+  document.querySelector('#app').innerHTML = `
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand"><span class="brand-mark">◌</span><span>ECHO LOOP</span></div>
+        <div class="run-type"><span class="live-dot"></span><span>ARENA LIVE</span></div>
+        <div class="topbar-actions"><button class="icon-button" id="sound-button" aria-label="Activar o silenciar sonido">◒</button></div>
+      </header>
+      <section class="lobby-panel online-panel">
+        <div class="lobby-copy">
+          <span class="eyebrow">ONLINE COMPETITIVE</span>
+          <h2>ESPERANDO RIVAL</h2>
+          <p>Se conectará cuando haya dos personas en la arena. Las trampas y los ecos se activan automáticamente al inicio del duelo.</p>
+        </div>
+        <div class="lobby-actions">
+          <div class="timer-box"><span>PREP</span><strong id="online-timer">60</strong></div>
+        </div>
+      </section>
+      <section class="game-wrap online-match-wrap">
+        <canvas id="game" aria-label="Arena de preparación online."></canvas>
+      </section>
+    </main>
+  `
+
+  const canvas = document.querySelector('#game')
+  if (canvas) {
+    const context = canvas.getContext('2d')
+    const drawWaiting = () => {
+      const width = canvas.clientWidth || 900
+      const height = canvas.clientHeight || 420
+      canvas.width = width * (window.devicePixelRatio || 1)
+      canvas.height = height * (window.devicePixelRatio || 1)
+      context.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0)
+      context.clearRect(0, 0, width, height)
+      const gradient = context.createLinearGradient(0, 0, width, height)
+      gradient.addColorStop(0, '#0a1621')
+      gradient.addColorStop(1, '#040b11')
+      context.fillStyle = gradient
+      context.fillRect(0, 0, width, height)
+      context.fillStyle = '#d7ff63'
+      context.font = "700 22px 'DM Mono', monospace"
+      context.textAlign = 'center'
+      context.fillText('RIVAL EN BUSCA...', width / 2, height / 2)
+    }
+    drawWaiting()
+  }
+
+  const timerLabel = document.querySelector('#online-timer')
+  const interval = setInterval(() => {
+    const state = getOnlineRoomState()
+    const playersReady = state.players.length >= 2
+    if (playersReady) {
+      const remaining = Math.max(0, Math.ceil((state.startedAt - Date.now()) / 1000))
+      if (timerLabel) timerLabel.textContent = remaining
+      if (remaining <= 0) {
+        clearInterval(interval)
+        onlineMode = true
+        onlineMatchActive = true
+        onlineCountdown = 0
+        startRun()
+      }
+    } else {
+      if (timerLabel) timerLabel.textContent = '60'
+    }
+  }, 1000)
+
+  window.addEventListener('storage', (event) => {
+    if (event.key === 'echo-loop-online-room') {
+      const roomState = getOnlineRoomState()
+      if (roomState.players.length >= 2) {
+        clearInterval(interval)
+        onlineMode = true
+        onlineMatchActive = true
+        onlineCountdown = 60
+        startRun()
+      }
+    }
+  }, { once: true })
+}
+
+function startOnlineArena() {
+  const room = getOnlineRoomState()
+  if (room.players.length >= 2) {
+    onlineMode = true
+    onlineCountdown = 60
+    onlineMatchActive = true
+    startRun()
+    return
+  }
+  renderOnlineWaitingState()
+}
+
+function renderSecretPage() {
+  const leagueData = {
+    'Champions': {
+      header: 'LIVE PREDICT · Champions',
+      matches: [
+        {
+          home: 'Real Madrid', away: 'Inter Milan', homeShort: 'RMA', awayShort: 'INT', score: '2 - 1', time: '21:00', date: '8 sep 2026', formHome: 'LWW', formAway: 'WWW', strengthHome: 92, strengthAway: 88, keyHome: ['Mbappé', 'Vinícius', 'Rodrygo'], keyAway: ['Lautaro', 'Barella', 'Bastoni'], odds: { home: 1.85, draw: 3.40, away: 4.10 }, confidence: 82, forecast: '2-1 Madrid', reason: 'Dominio histórico en casa, ofensiva letal Mbappé-Vinícius y presión alta en la creación.'
+        },
+        {
+          home: 'Manchester City', away: 'Porto', homeShort: 'MCI', awayShort: 'POR', score: '2 - 0', time: '15:00', date: '8 sep 2026', formHome: 'WWW', formAway: 'LWW', strengthHome: 94, strengthAway: 81, keyHome: ['Haaland', 'De Bruyne', 'Foden'], keyAway: ['Pepê', 'Evanilson', 'Grujic'], odds: { home: 1.85, draw: 3.90, away: 4.40 }, confidence: 78, forecast: '2-0 City', reason: 'City es favorito claro; Porto resiente defensivamente ante presión alta y tercer cuarto del campo.'
+        },
+        {
+          home: 'Borussia Dortmund', away: 'Villarreal', homeShort: 'DOR', awayShort: 'VIL', score: '3 - 1', time: '15:00', date: '8 sep 2026', formHome: 'WWL', formAway: 'WWD', strengthHome: 82, strengthAway: 79, keyHome: ['Guirassy', 'Adeyemi', 'Süle'], keyAway: ['Baena', 'Pais', 'Mandi'], odds: { home: 1.95, draw: 3.50, away: 4.25 }, confidence: 76, forecast: '3-1 Dortmund', reason: 'Casa fuerte, intensidad alta y mejor capacidad para ser agresivo en contraataque.'
+        },
+        {
+          home: 'Lille', away: 'Real Betis', homeShort: 'LIL', awayShort: 'BET', score: '1 - 2', time: '15:00', date: '8 sep 2026', formHome: 'DWW', formAway: 'WWD', strengthHome: 76, strengthAway: 77, keyHome: ['David', 'Andre', 'Sanchez'], keyAway: ['Isco', 'Rui Silva', 'Rodrigo'], odds: { home: 2.90, draw: 3.30, away: 2.45 }, confidence: 68, forecast: '1-2 Betis', reason: 'Betis muestra mejor transición y más equilibrio en mediocampo, especialmente con la salida del balón.'
+        },
+        {
+          home: 'Club Brugge', away: 'Aston Villa', homeShort: 'BRU', awayShort: 'AVL', score: '1 - 1', time: '18:45', date: '8 sep 2026', formHome: 'DWL', formAway: 'WWD', strengthHome: 75, strengthAway: 83, keyHome: ['Nusa', 'Vanaken', 'Mechele'], keyAway: ['Watkins', 'McGinn', 'Mings'], odds: { home: 3.20, draw: 3.40, away: 2.10 }, confidence: 70, forecast: '1-1', reason: 'Partido muy igualado; Brugge controla la posesión, Villa es más letal en espacios abiertos.'
+        },
+        {
+          home: 'AEK Athens', away: 'LASK', homeShort: 'AEK', awayShort: 'LAS', score: '1 - 0', time: '18:45', date: '8 sep 2026', formHome: 'DWW', formAway: 'DWL', strengthHome: 72, strengthAway: 74, keyHome: ['Marmoush', 'Ponce', 'Rojas'], keyAway: ['Mihalic', 'Ljubicic', 'Zivkovic'], odds: { home: 2.35, draw: 3.10, away: 3.05 }, confidence: 66, forecast: '1-0 AEK', reason: 'AEK impone mejor velocidad de circulación y alcanza más metros en campo rival.'
+        }
+      ],
+      standings: [
+        { team: 'Man City', pts: 18, gd: '+8', form: 'WWW' },
+        { team: 'Real Madrid', pts: 15, gd: '+6', form: 'WWL' },
+        { team: 'Inter Milan', pts: 15, gd: '+5', form: 'WWD' },
+        { team: 'Dortmund', pts: 14, gd: '+4', form: 'WWL' },
+        { team: 'Aston Villa', pts: 13, gd: '+3', form: 'WWD' }
+      ],
+      scorers: [
+        { player: 'Haaland', club: 'Man City', goals: 16 },
+        { player: 'Mbappé', club: 'Real Madrid', goals: 15 },
+        { player: 'Lautaro', club: 'Inter', goals: 14 },
+        { player: 'Guirassy', club: 'Dortmund', goals: 12 },
+        { player: 'Watkins', club: 'Aston Villa', goals: 11 }
+      ]
+    },
+    'La Liga': {
+      header: 'LIVE PREDICT · LaLiga',
+      matches: [
+        {
+          home: 'Barcelona', away: 'Feyenoord', homeShort: 'BAR', awayShort: 'FEY', score: '2 - 0', time: '18:45', date: '9 sep 2026', formHome: 'WWD', formAway: 'WWL', strengthHome: 89, strengthAway: 78, keyHome: ['Lamine', 'Pedri', 'Lewandowski'], keyAway: ['Sá', 'Jahanbakhsh', 'Timber'], odds: { home: 1.55, draw: 4.20, away: 5.10 }, confidence: 81, forecast: '2-0 Barcelona', reason: 'Barcelona tiene más ritmo en alas y mejor circulación en el último tercio.'
+        },
+        {
+          home: 'Stuttgart', away: 'Viking', homeShort: 'STU', awayShort: 'VIK', score: '1 - 1', time: '18:45', date: '9 sep 2026', formHome: 'WDL', formAway: 'DWL', strengthHome: 78, strengthAway: 71, keyHome: ['Mavropanos', 'Millot', 'Borja'], keyAway: ['Aune', 'Hjelde', 'Segberg'], odds: { home: 1.80, draw: 3.50, away: 4.60 }, confidence: 67, forecast: '1-1', reason: 'Partido con muchos duelos físicos y poca claridad en la finalización.'
+        },
+        {
+          home: 'Real Madrid', away: 'Inter Milan', homeShort: 'RMA', awayShort: 'INT', score: '2 - 1', time: '21:00', date: '8 sep 2026', formHome: 'LWW', formAway: 'WWW', strengthHome: 92, strengthAway: 88, keyHome: ['Mbappé', 'Vinícius', 'Bellingham'], keyAway: ['Lautaro', 'Barella', 'Bastoni'], odds: { home: 1.85, draw: 3.40, away: 4.10 }, confidence: 82, forecast: '2-1 Madrid', reason: 'Dominio histórico en casa, ofensiva letal Mbappé-Vinícius y presión alta en la creación.'
+        },
+        {
+          home: 'Girona', away: 'Sevilla', homeShort: 'GIR', awayShort: 'SEV', score: '2 - 0', time: '17:15', date: '8 sep 2026', formHome: 'WWW', formAway: 'LWL', strengthHome: 80, strengthAway: 74, keyHome: ['Stuani', 'Rashford', 'Van de Beek'], keyAway: ['Suso', 'Navas', 'Soumaré'], odds: { home: 2.05, draw: 3.40, away: 3.70 }, confidence: 69, forecast: '2-0 Girona', reason: 'Girona gana la fase de bloqueo y convierte la primera gran ocasión con muy buena circulación.'
+        },
+        {
+          home: 'Valencia', away: 'Betis', homeShort: 'VAL', awayShort: 'BET', score: '1 - 2', time: '15:00', date: '8 sep 2026', formHome: 'LWL', formAway: 'WWD', strengthHome: 72, strengthAway: 77, keyHome: ['Gaya', 'López', 'Duro'], keyAway: ['Isco', 'Rui Silva', 'Rodrigo'], odds: { home: 3.10, draw: 3.20, away: 2.20 }, confidence: 68, forecast: '1-2 Betis', reason: 'Betis controla mejor los segundos balones y corta la salida del centro.'
+        },
+        {
+          home: 'Celta', away: 'Villarreal', homeShort: 'CEL', awayShort: 'VIL', score: '1 - 1', time: '18:45', date: '8 sep 2026', formHome: 'DWL', formAway: 'WWD', strengthHome: 75, strengthAway: 79, keyHome: ['Bamba', 'Mina', 'Carvalho'], keyAway: ['Baena', 'Pape Gueye', 'Pais'], odds: { home: 2.65, draw: 3.30, away: 2.60 }, confidence: 66, forecast: '1-1', reason: 'Partido equilibrado, con dos equipos muy ordenados en transición.'
+        }
+      ],
+      standings: [
+        { team: 'Barcelona', pts: 12, gd: '+13', form: 'WWW' },
+        { team: 'Real Madrid', pts: 10, gd: '+10', form: 'WWL' },
+        { team: 'Atletico Madrid', pts: 10, gd: '+8', form: 'LWW' },
+        { team: 'Real Sociedad', pts: 9, gd: '+4', form: 'WWD' },
+        { team: 'Real Betis', pts: 7, gd: '+2', form: 'WWD' }
+      ],
+      scorers: [
+        { player: 'Raphinha', club: 'Barcelona', goals: 6 },
+        { player: 'Mbappé', club: 'Real Madrid', goals: 5 },
+        { player: 'Lewandowski', club: 'Barcelona', goals: 4 },
+        { player: 'Vinícius', club: 'Real Madrid', goals: 4 },
+        { player: 'Sorloth', club: 'Atleti', goals: 4 }
+      ]
+    },
+    'Premier League': {
+      header: 'LIVE PREDICT · Premier',
+      matches: [
+        {
+          home: 'Liverpool', away: 'Chelsea', homeShort: 'LIV', awayShort: 'CHE', score: '2 - 2', time: '17:30', date: '8 sep 2026', formHome: 'WWD', formAway: 'LWW', strengthHome: 91, strengthAway: 84, keyHome: ['Salah', 'Diaz', 'Van Dijk'], keyAway: ['Jackson', 'Palmer', 'Colwill'], odds: { home: 2.00, draw: 3.40, away: 3.65 }, confidence: 75, forecast: '2-2', reason: 'Partido de alta intensidad con mucha carga en los espacios centrales.'
+        },
+        {
+          home: 'Arsenal', away: 'Tottenham', homeShort: 'ARS', awayShort: 'TOT', score: '1 - 0', time: '16:00', date: '8 sep 2026', formHome: 'WWD', formAway: 'DWL', strengthHome: 89, strengthAway: 81, keyHome: ['Saka', 'Rice', 'Martinelli'], keyAway: ['Son', 'Kulusevski', 'Van de Ven'], odds: { home: 2.20, draw: 3.30, away: 3.15 }, confidence: 73, forecast: '1-0 Arsenal', reason: 'Arsenal impone dominio territorial y se prepara mejor para cerrar el juego.'
+        },
+        {
+          home: 'Aston Villa', away: 'Newcastle', homeShort: 'AVL', awayShort: 'NEW', score: '2 - 1', time: '19:45', date: '8 sep 2026', formHome: 'WWL', formAway: 'WWW', strengthHome: 82, strengthAway: 85, keyHome: ['Watkins', 'Mings', 'McGinn'], keyAway: ['Isak', 'Guimarães', 'Tonali'], odds: { home: 2.50, draw: 3.35, away: 2.80 }, confidence: 68, forecast: '2-1 Villa', reason: 'Villa logra exceder el ritmo del partido en la segunda parte con mucha verticalidad.'
+        },
+        {
+          home: 'Fulham', away: 'Brighton', homeShort: 'FUL', awayShort: 'BHA', score: '1 - 1', time: '15:00', date: '8 sep 2026', formHome: 'DWW', formAway: 'WWW', strengthHome: 74, strengthAway: 78, keyHome: ['Adama', 'Andreas', 'Leno'], keyAway: ['Mitoma', 'Pedro', 'Van Hecke'], odds: { home: 2.80, draw: 3.30, away: 2.40 }, confidence: 66, forecast: '1-1', reason: 'Poca claridad en el área; Brighton domina el balón, Fulham la transición.'
+        },
+        {
+          home: 'Man United', away: 'West Ham', homeShort: 'MUN', awayShort: 'WHU', score: '1 - 2', time: '18:30', date: '8 sep 2026', formHome: 'LWW', formAway: 'DWL', strengthHome: 76, strengthAway: 73, keyHome: ['Amad', 'Mainoo', 'Hojlund'], keyAway: ['Bowen', 'Paquetá', 'Souček'], odds: { home: 2.10, draw: 3.35, away: 3.50 }, confidence: 67, forecast: '1-2 West Ham', reason: 'West Ham crea mejores ventajas tras balón parado y mejora el bloqueo en zona media.'
+        },
+        {
+          home: 'Leicester', away: 'Nottingham', homeShort: 'LEI', awayShort: 'NFO', score: '0 - 0', time: '14:30', date: '8 sep 2026', formHome: 'LWD', formAway: 'DWW', strengthHome: 69, strengthAway: 72, keyHome: ['Mavididi', 'Winks', 'Buonanotte'], keyAway: ['Wood', 'Aurier', 'Elanga'], odds: { home: 2.55, draw: 3.25, away: 2.75 }, confidence: 65, forecast: '0-0', reason: 'Encuentro de baja producción y combates directos en el centro del campo.'
+        }
+      ],
+      standings: [
+        { team: 'Arsenal', pts: 57, gd: '+21', form: 'WWD' },
+        { team: 'Liverpool', pts: 54, gd: '+18', form: 'WWD' },
+        { team: 'Man City', pts: 53, gd: '+17', form: 'WWW' },
+        { team: 'Chelsea', pts: 47, gd: '+7', form: 'LWW' },
+        { team: 'Villa', pts: 45, gd: '+8', form: 'WWL' }
+      ],
+      scorers: [
+        { player: 'Haaland', club: 'Man City', goals: 16 },
+        { player: 'Salah', club: 'Liverpool', goals: 14 },
+        { player: 'Watkins', club: 'Aston Villa', goals: 12 },
+        { player: 'Jackson', club: 'Chelsea', goals: 11 },
+        { player: 'Isak', club: 'Newcastle', goals: 11 }
+      ]
+    }
+  }
+
+  const selectedLeague = 'Champions'
+  const activeData = leagueData[selectedLeague]
+
+  document.querySelector('#app').innerHTML = `
+    <main class="secret-shell">
+      <div class="secret-lock" id="secret-lock" aria-label="Protección de acceso">
+        <img src="https://img.wattpad.com/cover/333762199-288-k582744.jpg" alt="Portada de protección" />
+        <div class="lock-hint">Toca para desbloquear</div>
+      </div>
+
+      <header class="secret-header premium-header">
+        <div class="header-left">
+          <div class="brand small"><span class="brand-mark">◌</span><span>LIVE FOOTBALL</span></div>
+          <div class="live-pill"><span class="live-dot red"></span><span>EN VIVO</span></div>
+        </div>
+
+        <div class="header-center">
+          <div class="header-clock" id="live-clock">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+        </div>
+
+        <div class="header-actions">
+          <button class="primary-button secret-back" id="back-button" type="button"><span>VOLVER</span><span>→</span></button>
+        </div>
+      </header>
+
+      <section class="full-football-panel">
+        <div class="feature-block big">
+          <span class="eyebrow">PARTIDO DESTACADO</span>
+          <h1>Real Madrid vs Inter Milan</h1>
+          <div class="score-box">2 - 1</div>
+          <p>El duelo del día con rendimiento real, presión alta y posibilidad de contraataque letal.</p>
+        </div>
+
+        <div class="feature-block">
+          <span class="eyebrow">SÍNTESIS</span>
+          <ul>
+            <li>Forma reciente: W W D L W</li>
+            <li>Goles esperados: 2.4</li>
+            <li>Control: 58% / 42%</li>
+            <li>Fósforos: Mbappé, Vinícius, Lautaro</li>
+          </ul>
+        </div>
+
+        <div class="feature-block">
+          <span class="eyebrow">ONLINE</span>
+          <ul>
+            <li>1 minuto de preparación</li>
+            <li>Trampas activas</li>
+            <li>Eco agresivo</li>
+            <li>Rival: espera de conexión</li>
+          </ul>
+        </div>
+      </section>
+    </main>
+  `
+
+  const secretLock = document.querySelector('#secret-lock')
+  if (secretLock) {
+    secretLock.addEventListener('click', () => {
+      secretLock.classList.add('is-hidden')
+      setTimeout(() => {
+        secretLock.remove()
+      }, 220)
+    })
+  }
+
+  const liveClock = document.querySelector('#live-clock')
+  if (liveClock) {
+    setInterval(() => {
+      liveClock.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }, 1000)
+  }
+
+  document.querySelectorAll('.league-chip').forEach((button) => {
+    button.addEventListener('click', () => {
+      const nextLeague = button.dataset.league
+      if (!nextLeague) return
+      const root = document.querySelector('#app')
+      root.innerHTML = `
+        <div class="secret-loading">Cargando ${nextLeague}...</div>
+      `
+      setTimeout(() => {
+        renderSecretPage()
+      }, 100)
+    })
+  })
+
+  document.querySelector('#back-button').addEventListener('click', () => {
+    window.location.reload()
+  })
+}
+
+if (goldBallButton) {
+  goldBallButton.addEventListener('click', () => {
+    secretClickCount += 1
+
+    if (secretTimer) clearTimeout(secretTimer)
+    secretTimer = setTimeout(() => {
+      secretClickCount = 0
+    }, 900)
+
+    if (secretClickCount >= 5) {
+      secretClickCount = 0
+      renderSecretPage()
+    }
+  })
+}
+
+playOnlineButton.addEventListener('click', () => {
+  startOnlineArena()
+})
 
 const delay = 5
 const playerRadius = 10
@@ -189,6 +559,36 @@ function startRun() {
   powerPanel.hidden = true
   delete powerPanel.dataset.shown
   message.classList.add('hidden')
+  if (onlineMode) {
+    onlineCountdown = 60
+    setTimeout(() => {
+      if (!running) return
+      for (let i = 0; i < 5; i += 1) {
+        echoes.push({
+          born: elapsedTime,
+          color: i % 2 ? '#ff8a65' : '#d7ff63',
+          drift: (Math.random() - 0.5) * 36,
+          phase: Math.random() * Math.PI * 2,
+          isDecoy: false,
+          x: arena.left + 40 + Math.random() * (arena.right - arena.left - 80),
+          y: arena.top + 40 + Math.random() * (arena.bottom - arena.top - 80),
+        })
+      }
+      for (let i = 0; i < 2; i += 1) {
+        traps.push({
+          x: arena.left + 60 + Math.random() * (arena.right - arena.left - 120),
+          y: arena.top + 60 + Math.random() * (arena.bottom - arena.top - 120),
+          radius: 26,
+          born: elapsedTime,
+          speed: 10,
+          memoryDelay: 2,
+          phase: Math.random() * Math.PI,
+          laserAngle: Math.random() * Math.PI * 2,
+          laserSpeed: 0.9,
+        })
+      }
+    }, 1000)
+  }
   requestAnimationFrame(frame)
 }
 
@@ -445,6 +845,57 @@ function drawCircle(x, y, radius, color, ghost) {
   context.globalAlpha = 1
 }
 
+function playLossAudio() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext
+  if (!AudioContextClass) return
+
+  const audioContext = new AudioContextClass()
+  const master = audioContext.createGain()
+  master.gain.value = 0.08
+  master.connect(audioContext.destination)
+
+  const sequence = [220, 196, 174, 146, 130, 110, 98]
+  const start = audioContext.currentTime
+
+  sequence.forEach((frequency, index) => {
+    const oscillator = audioContext.createOscillator()
+    const gainNode = audioContext.createGain()
+    const attack = 0.02
+    const decay = 0.5
+    const time = start + index * 0.8
+
+    oscillator.type = 'sawtooth'
+    oscillator.frequency.setValueAtTime(frequency, time)
+    oscillator.frequency.exponentialRampToValueAtTime(Math.max(frequency * 0.72, 60), time + decay)
+
+    gainNode.gain.setValueAtTime(0.0001, time)
+    gainNode.gain.exponentialRampToValueAtTime(0.12, time + attack)
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, time + decay)
+
+    oscillator.connect(gainNode)
+    gainNode.connect(master)
+
+    oscillator.start(time)
+    oscillator.stop(time + decay + 0.08)
+  })
+
+  setTimeout(() => {
+    audioContext.close()
+  }, 6200)
+}
+
+function showLossScreen() {
+  const overlay = document.querySelector('#loss-overlay')
+  if (!overlay) return
+  overlay.hidden = false
+  overlay.classList.add('is-visible')
+  playLossAudio()
+
+  setTimeout(() => {
+    window.location.reload()
+  }, 6000)
+}
+
 function endRun(elapsed, reason = 'Tu pasado te encontró.') {
   running = false
   const earned = Math.floor(elapsed * (elapsed > 20 ? 2 : 1))
@@ -459,6 +910,7 @@ function endRun(elapsed, reason = 'Tu pasado te encontró.') {
   message.querySelector('p').textContent = `${reason} +${earned}⌁ · El récord queda guardado.`
   startButton.querySelector('span:first-child').textContent = 'REINTENTAR'
   message.classList.remove('hidden')
+  showLossScreen()
 }
 
 function showPowerChoice() {
