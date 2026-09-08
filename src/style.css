@@ -137,6 +137,13 @@ button { font: inherit; }
 .setup-heading small { color: var(--muted); font: 10px 'DM Mono', monospace; }
 .setup-heading b { color: var(--acid); }
 .trap-choice-list { display: flex; gap: 8px; }
+.help-choice-list { display: flex; gap: 8px; flex-wrap: wrap; }
+.help-choice { min-width: 132px; padding: 9px 10px; border: 1px solid rgba(8,127,140,.28); color: var(--ink); background: rgba(255, 214, 112, .2); cursor: pointer; text-align: left; }
+.help-choice:hover, .help-choice.selected { border-color: var(--coral); background: rgba(228, 103, 79, .12); }
+.help-choice:disabled { cursor: default; opacity: .65; }
+.help-choice strong, .help-choice small { display: block; }
+.help-choice strong { font: 10px 'DM Mono', monospace; letter-spacing: .8px; }
+.help-choice small { margin-top: 4px; color: var(--muted); font-size: 10px; }
 .trap-choice { min-width: 100px; padding: 9px 10px; border: 1px solid var(--line); color: var(--muted); background: rgba(238, 244, 247, .8); cursor: pointer; text-align: left; }
 .trap-choice.selected, .trap-choice:hover { border-color: var(--acid); color: var(--ink); background: rgba(215,255,99,.08); }
 .trap-choice span, .trap-choice strong, .trap-choice small { display: block; }
@@ -378,6 +385,8 @@ button { font: inherit; }
   .setup-heading small { line-height: 1.5; }
   .trap-choice-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .trap-choice { min-width: 0; padding: 9px 7px; }
+  .help-choice-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .help-choice { min-width: 0; }
   .setup-start-button { width: 100%; justify-content: space-between; }
   .gold-ball { width: 38px; height: 38px; }
 }

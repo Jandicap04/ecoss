@@ -111,6 +111,11 @@ let peerIsConnected = false
 let onlineSetupActive = false
 let onlineSelectedTrap = 'bird-net'
 let onlineSetupTraps = []
+let onlineHelpChoices = []
+let onlineHelpMenuPurchases = []
+let onlineHelpRound = 0
+let onlineExtraLife = false
+let onlineTrapImmuneUntil = 0
 let onlineSetupTimer = null
 let onlineBeginTimer = null
 let onlineRestartTimer = null
@@ -119,6 +124,7 @@ let onlineSetupReady = false
 let remoteSetupReady = false
 let onlinePlayerAlive = true
 let onlineOpponentAlive = true
+let opponentLives = 2
 let onlineMatchEnded = false
 let onlineSpectator = false
 let spectatorEchoActive = false
@@ -169,7 +175,8 @@ if (onlineChannel) {
       return
     }
     if (state.type !== 'player-state') return
-    opponent = { id: state.id, name: state.name || 'RIVAL', skin: state.skin || 'retro', x: state.x, y: state.y, elapsed: state.elapsed || 0, lastSeen: performance.now() }
+    opponent = { id: state.id, name: state.name || 'RIVAL', skin: state.skin || 'retro', x: state.x, y: state.y, elapsed: state.elapsed || 0, lives: state.lives ?? 2, lastSeen: performance.now() }
+    opponentLives = opponent.lives
   })
 }
 
@@ -228,6 +235,11 @@ function showOnlineTrapSetup() {
   onlineSetupReady = false
   remoteSetupReady = false
   onlineSetupTraps = []
+  onlineHelpChoices = []
+  onlineHelpMenuPurchases = []
+  onlineExtraLife = false
+  onlineTrapImmuneUntil = 0
+  opponentLives = 2
   remoteControlledEcho = null
   spectatorEchoActive = false
   document.querySelector('#spectator-echo-button')?.remove()
@@ -245,6 +257,46 @@ function showOnlineTrapSetup() {
     onlineSelectedTrap = button.dataset.trapChoice
     document.querySelectorAll('[data-trap-choice]').forEach((item) => item.classList.toggle('selected', item === button))
   }))
+  document.querySelectorAll('[data-help-choice]').forEach((button) => button.addEventListener('click', () => purchaseOnlineHelp(button.dataset.helpChoice)))
+}
+
+function getOnlineHelpCost(type) {
+  const round = Math.floor(elapsedTime / 30)
+  return type === 'extra-life' ? 7 + round * 2 : 10 + round * 3
+}
+
+function purchaseOnlineHelp(type) {
+  if ((!onlineSetupActive && !onlineMode) || onlineHelpMenuPurchases.includes(type)) return
+  const cost = getOnlineHelpCost(type)
+  if (currency < cost) return
+  currency -= cost
+  onlineHelpMenuPurchases.push(type)
+  onlineHelpChoices.push(type)
+  if (type === 'extra-life') {
+    onlineExtraLife = true
+    if (onlineMode) {
+      lives += 1
+      livesElement.textContent = lives
+    }
+  }
+  if (type === 'trap-immunity') onlineTrapImmuneUntil = performance.now() + 10000
+  localStorage.setItem('echo-loop-currency', currency)
+  updateSkinStore()
+  const button = document.querySelector(`[data-help-choice="${type}"]`)
+  if (button) {
+    button.classList.add('selected')
+    button.disabled = true
+    button.querySelector('small').textContent = 'COMPRADO'
+  }
+  if (onlineMode) resumeOnlineMatch()
+}
+
+function resumeOnlineMatch() {
+  powerPanel.hidden = true
+  delete powerPanel.dataset.shown
+  running = true
+  lastFrame = performance.now()
+  requestAnimationFrame(frame)
 }
 
 function updateSetupReadyDisplay() {
@@ -259,6 +311,12 @@ function updateSetupReadyDisplay() {
 function confirmOnlineSetup() {
   if (!onlineSetupActive || onlineSetupReady) return
   onlineSetupReady = true
+  if (onlineExtraLife) {
+    onlineSetupTraps.push(
+      { type: 'bird-net', x: width * .24, y: height * .3, radius: 34, born: 0, active: true, laserAngle: 0 },
+      { type: 'axe', x: width * .76, y: height * .68, radius: 26, born: 0, active: true, laserAngle: 0 },
+    )
+  }
   if (!onlineSetupTraps.length) {
     onlineSetupTraps = [
       { type: 'bird-net', x: width * .25, y: height * .35, radius: 34, born: 0, active: true, laserAngle: 0 },
@@ -319,6 +377,7 @@ function beginOnlineMatch() {
   onlineMatchActive = true
   onlineSpectator = false
   spectatorEchoActive = false
+  if (onlineHelpChoices.includes('trap-immunity')) onlineTrapImmuneUntil = performance.now() + 10000
   onlineCountdown = 60
   updatePeerRoomDisplay('PERSEGUIR AL RIVAL')
   startRun()
@@ -391,7 +450,8 @@ function attachPeerConnection(connection, name) {
       return
     }
     if (!message || message.type !== 'player-state') return
-    opponent = { id: connection.peer, name: message.name || 'RIVAL', skin: message.skin || 'retro', x: message.x, y: message.y, elapsed: message.elapsed || 0, lastSeen: performance.now() }
+    opponent = { id: connection.peer, name: message.name || 'RIVAL', skin: message.skin || 'retro', x: message.x, y: message.y, elapsed: message.elapsed || 0, lives: message.lives ?? 2, lastSeen: performance.now() }
+    opponentLives = opponent.lives
     if (Array.isArray(message.traps)) remoteTraps = message.traps
     onlinePeers.set(connection.peer, { id: connection.peer, name: opponent.name, lastSeen: performance.now() })
     updateOnlinePlayersDisplay()
@@ -505,11 +565,15 @@ function renderOnlineWaitingState(name) {
         <div class="skin-list" id="skin-list"></div>
       </section>
       <section class="online-setup" id="online-setup" hidden>
-        <div class="setup-heading"><span class="eyebrow">FASE DE PREPARACIÓN</span><strong>COLOCA TUS TRAMPAS</strong><small>Elige una y toca el mapa. Inicio automático en <b id="online-setup-countdown">5</b>s.</small></div>
+        <div class="setup-heading"><span class="eyebrow">FASE DE PREPARACIÓN</span><strong>COLOCA TUS TRAMPAS</strong><small>Elige trampas y ayudas. Ambos confirman; después inicia en <b id="online-setup-countdown">--</b>s.</small></div>
         <div class="trap-choice-list">
-          <button class="trap-choice selected" data-trap-choice="bird-net" type="button"><span>◆</span><strong>PÁJARO</strong><small>Red móvil</small></button>
-          <button class="trap-choice" data-trap-choice="wolf-laser" type="button"><span>◢</span><strong>LOBO</strong><small>Láser inicial</small></button>
-          <button class="trap-choice" data-trap-choice="axe" type="button"><span>╱</span><strong>HACHA</strong><small>Persigue al eco</small></button>
+          <button class="trap-choice selected" data-trap-choice="bird-net" type="button"><span>◆</span><strong>PUNTO ZOMBI · 2</strong><small>Deja zombis</small></button>
+          <button class="trap-choice" data-trap-choice="wolf-laser" type="button"><span>◢</span><strong>LOBO · 5</strong><small>Láser inicial</small></button>
+          <button class="trap-choice" data-trap-choice="axe" type="button"><span>╱</span><strong>HACHA · 3</strong><small>Persigue al eco</small></button>
+        </div>
+        <div class="help-choice-list">
+          <button class="help-choice" data-help-choice="extra-life" type="button"><strong>VIDA EXTRA</strong><small>7⌁ · +1 vida</small></button>
+          <button class="help-choice" data-help-choice="trap-immunity" type="button"><strong>INMUNE</strong><small>10⌁ · 10s</small></button>
         </div>
         <button class="primary-button setup-start-button" id="online-start-button" type="button"><span>EMPEZAR</span><span>→</span></button>
       </section>
@@ -1066,7 +1130,7 @@ function startRun() {
   resize()
   randomizeArena()
   running = true
-  lives = 2
+  lives = onlineMode && onlineExtraLife ? 3 : 2
   livesElement.textContent = lives
   startTime = performance.now()
   lastFrame = startTime
@@ -1075,7 +1139,7 @@ function startRun() {
   nextTrapAt = 15
   difficultyLevel = 1
   nextDecoyAt = 1
-  nextPowerAt = 20
+  nextPowerAt = onlineMode ? 30 : 20
   history = []
   echoes = []
   particles = []
@@ -1119,7 +1183,7 @@ function update(elapsed, delta) {
   player.x += (player.targetX - player.x) * smoothing
   player.y += (player.targetY - player.y) * smoothing
   if (onlineMode && performance.now() - lastOnlineBroadcast > 50) {
-    const state = { type: 'player-state', id: localPlayerId, name: localStorage.getItem('echo-loop-player-name') || 'JUGADOR', skin: selectedSkin, x: player.x, y: player.y, elapsed, traps: onlineMode ? traps.map(({ type, x, y, radius, born, laserAngle, active }) => ({ type, x, y, radius, born, laserAngle, active })) : [] }
+    const state = { type: 'player-state', id: localPlayerId, name: localStorage.getItem('echo-loop-player-name') || 'JUGADOR', skin: selectedSkin, x: player.x, y: player.y, elapsed, lives, traps: onlineMode ? traps.map(({ type, x, y, radius, born, laserAngle, active, spawned }) => ({ type, x, y, radius, born, laserAngle, active, spawned })) : [] }
     if (onlineChannel) onlineChannel.postMessage(state)
     if (peerConnection?.open) peerConnection.send(state)
     lastOnlineBroadcast = performance.now()
@@ -1320,24 +1384,15 @@ function update(elapsed, delta) {
         endRun(elapsed, 'EL ECO DEL ELIMINADO TE ENCONTRO.')
         return
       }
-    if (Math.hypot(player.x - opponent.x, player.y - opponent.y) < playerRadius * 2.3) {
-      const attackerWins = elapsed >= Number(opponent.elapsed || 0)
-      if (attackerWins) {
-        endRun(elapsed, 'EL RIVAL TE DERRIBO.')
-      } else {
-        onlineOpponentAlive = false
-        sendMatchResult('defeated')
-        updatePeerRoomDisplay('RIVAL ELIMINADO · CONTINUA')
-      }
-    }
   }
   timeElement.textContent = elapsed.toFixed(1).padStart(4, '0')
 
+  if (onlineMode && elapsed >= nextPowerAt && !powerPanel.dataset.shown) showOnlineHelpChoice()
   if (!onlineMode && elapsed >= nextPowerAt && !powerPanel.dataset.shown) showPowerChoice()
 }
 
 function detectCollisions(elapsed) {
-  if (elapsed < powerGraceUntil) return
+  if (elapsed < powerGraceUntil || (onlineMode && performance.now() < onlineTrapImmuneUntil)) return
   const collisionTraps = onlineMode ? [...traps, ...remoteTraps] : traps
   for (const trap of collisionTraps) {
     if (onlineMode || trap.type) {
@@ -1353,7 +1408,7 @@ function detectCollisions(elapsed) {
         }
       } else if (Math.hypot(player.x - trap.x, player.y - trap.y) < trap.radius + playerRadius) {
         burst(player.x, player.y, trap.type === 'zombie-echo' ? '#8dff70' : '#ff8a65', elapsed)
-        endRun(elapsed, trap.type === 'axe' ? 'EL HACHA TE ENCONTRO.' : trap.type === 'thrown-hammer' ? 'EL MARTILLO TE GOLPEO.' : trap.type === 'bird-net' ? 'CAISTE EN LA TRAMPA DEL PAJARO.' : trap.type === 'mini-zombie' ? 'UN ZOMBI PEQUENO TE ALCANZO.' : 'TU ECO ZOMBI TE ALCANZO.')
+        endRun(elapsed, trap.type === 'axe' ? 'EL HACHA TE ENCONTRO.' : trap.type === 'thrown-hammer' ? 'EL MARTILLO TE GOLPEO.' : trap.type === 'bird-net' ? 'LOS ZOMBIS TE ALCANZARON.' : trap.type === 'mini-zombie' ? 'UN ZOMBI PEQUENO TE ALCANZO.' : 'TU ECO ZOMBI TE ALCANZO.')
         return
       }
       continue
@@ -1460,18 +1515,17 @@ function draw(elapsed) {
       } else if (trap.type === 'mini-zombie' || trap.type === 'zombie-echo') {
         drawTrapCharacter(trap.x, trap.y, 'zombie', elapsed, trap.type === 'zombie-echo' ? 0.72 : 1)
       } else if (trap.type === 'bird-net') {
-        drawTrapCharacter(trap.x, trap.y, 'bird', elapsed)
+        context.beginPath()
+        context.arc(trap.x, trap.y, 9, 0, Math.PI * 2)
         context.fillStyle = '#d7ff63'
-        context.font = '9px DM Mono, monospace'
-        context.textAlign = 'center'
-        context.fillText('PAJARO', trap.x, trap.y - 24)
+        context.fill()
       } else {
         context.beginPath()
         context.arc(trap.x, trap.y, trap.radius, 0, Math.PI * 2)
         context.stroke()
         context.font = '9px DM Mono, monospace'
         context.textAlign = 'center'
-        context.fillText(trap.type === 'bird-net' ? 'PAJARO' : 'ZOMBI ECO', trap.x, trap.y - trap.radius - 6)
+        context.fillText(trap.type === 'bird-net' ? 'PUNTO' : 'ZOMBI ECO', trap.x, trap.y - trap.radius - 6)
       }
       context.globalAlpha = 1
       return
@@ -1801,6 +1855,21 @@ function showPowerChoice() {
     lastFrame = performance.now()
     requestAnimationFrame(frame)
   }, { once: true }))
+}
+
+function showOnlineHelpChoice() {
+  running = false
+  nextPowerAt += 30
+  onlineHelpMenuPurchases = []
+  powerPanel.dataset.shown = 'true'
+  powerPanel.hidden = false
+  powerGrid.innerHTML = `
+    <button class="power-card help-card" data-help-choice="extra-life" type="button"><span class="power-icon">+</span><strong>VIDA EXTRA</strong><small>Compra por ${getOnlineHelpCost('extra-life')}⌁ · suma una vida.</small></button>
+    <button class="power-card help-card" data-help-choice="trap-immunity" type="button"><span class="power-icon">◇</span><strong>INMUNE</strong><small>Compra por ${getOnlineHelpCost('trap-immunity')}⌁ · trampas no afectan durante 10s.</small></button>
+    <button class="power-card help-card help-skip" data-help-skip type="button"><span class="power-icon">→</span><strong>CONTINUAR</strong><small>Volver a la arena sin comprar.</small></button>
+  `
+  powerGrid.querySelectorAll('[data-help-choice]').forEach((button) => button.addEventListener('click', () => purchaseOnlineHelp(button.dataset.helpChoice), { once: true }))
+  powerGrid.querySelector('[data-help-skip]')?.addEventListener('click', resumeOnlineMatch, { once: true })
 }
 
 function bindCanvasControls() {
