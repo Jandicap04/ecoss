@@ -67,6 +67,10 @@ document.querySelector('#app').innerHTML = `
       <div class="skin-title"><span class="hud-label">SKINS</span><strong id="currency">0⌁</strong></div>
       <div class="skin-list" id="skin-list"></div>
     </section>
+    <section class="arena-cast" aria-label="Personajes de trampas y ecos">
+      <span class="hud-label">ARENA</span>
+      <div class="cast-list"><span class="cast-chip zombie-cast">ZOMBI · ECO</span><span class="cast-chip wolf-cast">LOBO</span><span class="cast-chip bird-cast">AVE · PUNTO</span><span class="cast-chip axe-cast">HOMBRE HACHA</span></div>
+    </section>
     <section class="game-wrap">
       <canvas id="game" aria-label="Área de juego. Mueve el puntero para controlar tu círculo."></canvas>
       <div class="game-message" id="message">
@@ -583,6 +587,10 @@ function renderOnlineWaitingState(name) {
         <div class="skin-title"><span class="hud-label">SKINS</span><strong id="currency">0⌁</strong></div>
         <div class="skin-list" id="skin-list"></div>
       </section>
+      <section class="arena-cast" aria-label="Personajes de trampas y ecos">
+        <span class="hud-label">ARENA</span>
+        <div class="cast-list"><span class="cast-chip zombie-cast">ZOMBI · ECO</span><span class="cast-chip wolf-cast">LOBO</span><span class="cast-chip bird-cast">AVE · PUNTO</span><span class="cast-chip axe-cast">HOMBRE HACHA</span></div>
+      </section>
       <section class="online-setup" id="online-setup" hidden>
         <div class="setup-heading"><span class="eyebrow">FASE DE PREPARACIÓN</span><strong>COLOCA TUS TRAMPAS</strong><small>Elige trampas y ayudas. Ambos confirman; después inicia en <b id="online-setup-countdown">--</b>s.</small></div>
         <div class="trap-choice-list">
@@ -992,21 +1000,27 @@ const skins = [
   { id: 'pixel-tech', name: 'PIXEL TECH', price: 100, core: '#263844', edge: '#d2e7e7', role: 'TECNICO PIXEL', character: 'pixel', pixelStyle: 9 },
   { id: 'pixel-heavy', name: 'PIXEL HEAVY', price: 110, core: '#353942', edge: '#979ba4', role: 'PESADO PIXEL', character: 'pixel', pixelStyle: 10 },
   { id: 'pixel-rogue', name: 'PIXEL ROGUE', price: 120, core: '#26262c', edge: '#746e72', role: 'NINJA PIXEL', character: 'pixel', pixelStyle: 11 },
-  { id: 'sniper', name: 'SNIPER', price: 800, core: '#64748b', edge: '#dbeafe', role: 'ECO A DISTANCIA', character: 'sniper' },
-  { id: 'heavy', name: 'HEAVY', price: 950, core: '#334155', edge: '#94a3b8', role: 'ARMADURA PESADA', character: 'heavy' },
-  { id: 'pilot', name: 'PILOT', price: 1100, core: '#0f766e', edge: '#99f6e4', role: 'MOVILIDAD AEREA', character: 'pilot' },
-  { id: 'samurai', name: 'SAMURAI', price: 1300, core: '#991b1b', edge: '#fecaca', role: 'CORTE RAPIDO', character: 'samurai' },
-  { id: 'robot', name: 'ROBOT', price: 1500, core: '#475569', edge: '#67e8f9', role: 'ESCUDO MECANICO', character: 'robot' },
-  { id: 'commando', name: 'COMMANDO', price: 1800, core: '#365314', edge: '#bef264', role: 'CAZADOR ELITE', character: 'commando' },
-  { id: 'shadow', name: 'SHADOW', price: 2200, core: '#18181b', edge: '#a1a1aa', role: 'ECO INVISIBLE', character: 'shadow' },
-  { id: 'boss', name: 'BOSS', price: 2800, core: '#7f1d1d', edge: '#fbbf24', role: 'JEFE FINAL', character: 'boss' },
+  { id: 'retro', name: 'SCOUT', price: 130, core: '#20a4ff', edge: '#b8e9ff', role: 'EXPLORADOR', character: 'scout' },
+  { id: 'plasma', name: 'ENGINEER', price: 140, core: '#a855f7', edge: '#f0abfc', role: 'CASCO NARANJA', character: 'engineer' },
+  { id: 'candy', name: 'BIRD', price: 150, core: '#f472b6', edge: '#ffe4f3', role: 'TRAMPAS AEREAS', character: 'bird' },
+  { id: 'matrix', name: 'RANGER', price: 160, core: '#52d11c', edge: '#d4ff7c', role: 'RASTREADOR', character: 'ranger' },
+  { id: 'glitch', name: 'AXE', price: 170, core: '#f43f5e', edge: '#22d3ee', role: 'LANZA HACHA', character: 'axe' },
+  { id: 'void', name: 'ZOMBIE', price: 180, core: '#241238', edge: '#c084fc', role: 'ECO DEL PASADO', character: 'zombie' },
+  { id: 'laser', name: 'WOLF', price: 190, core: '#e11d48', edge: '#fb7185', role: 'LASER INICIAL', character: 'wolf' },
+  { id: 'gold', name: 'COMMANDER', price: 200, core: '#e19b18', edge: '#fff0a8', role: 'GUERRERO', character: 'commander' },
+  { id: 'nebula', name: 'NINJA', price: 210, core: '#5b21b6', edge: '#e9d5ff', role: 'ECO OSCURO', character: 'ninja' },
+  { id: 'firewall', name: 'MEDIC', price: 220, core: '#ea580c', edge: '#fed7aa', role: 'RESISTENCIA', character: 'medic' },
+  { id: 'frost', name: 'SPEED', price: 230, core: '#0ea5e9', edge: '#dff8ff', role: 'SUPER VELOCIDAD', character: 'speed' },
+  { id: 'toxic', name: 'TOXIC', price: 240, core: '#3f9d16', edge: '#b8ff5b', role: 'ZOMBI TOXICO', character: 'toxic' },
 ]
 
 const trapSkins = {
-  bird: { id: 'trap-bird', core: '#f472b6', edge: '#ffe4f3', character: 'bird' },
-  wolf: { id: 'trap-wolf', core: '#e11d48', edge: '#fb7185', character: 'wolf' },
-  axe: { id: 'trap-axe', core: '#f43f5e', edge: '#22d3ee', character: 'axe' },
-  zombie: { id: 'trap-zombie', core: '#241238', edge: '#c084fc', character: 'zombie' },
+  bird: { id: 'trap-bird-pixel', core: '#2b7890', edge: '#bce8ee', character: 'pixel', pixelStyle: 2 },
+  wolf: { id: 'trap-wolf-pixel', core: '#24252f', edge: '#777889', character: 'pixel', pixelStyle: 3 },
+  axe: { id: 'trap-axe-pixel', core: '#d98813', edge: '#f7c94d', character: 'pixel', pixelStyle: 6 },
+  zombie: { id: 'trap-zombie-pixel', core: '#52d11c', edge: '#d4ff7c', character: 'pixel', pixelStyle: 0 },
+  'echo-hunter': { id: 'echo-hunter-pixel', core: '#303b49', edge: '#e5a26f', character: 'pixel', pixelStyle: 1 },
+  'echo-copy': { id: 'echo-copy-pixel', core: '#46414a', edge: '#b6b0a8', character: 'pixel', pixelStyle: 5 },
 }
 
 let width = 0
@@ -1056,15 +1070,16 @@ function updateSkinStore() {
   skinList.innerHTML = visibleSkins.map((skin) => {
     const unlocked = unlockedSkins.includes(skin.id)
     const selected = selectedSkin === skin.id
-    const label = selected ? 'USANDO' : unlocked ? 'ELEGIR' : `${skin.price}⌁`
+    const label = selected ? 'USANDO' : unlocked ? 'ELEGIR' : `${getSkinPrice(skin)}⌁`
     return `<button class="skin-chip ${selected ? 'selected' : ''}" data-skin="${skin.id}" data-character="${skin.character}" style="--skin-core:${skin.core};--skin-edge:${skin.edge}" title="${skin.name} · ${skin.role}"><span class="skin-orb"><i></i></span><span>${skin.name}</span><small>${label}</small></button>`
   }).join('')
   skinList.querySelectorAll('.skin-chip').forEach((button) => button.addEventListener('click', () => {
     const skin = skins.find((item) => item.id === button.dataset.skin)
     if (skin.unlockAfter && Math.max(best, elapsedTime) < skin.unlockAfter) return
     if (!unlockedSkins.includes(skin.id)) {
-      if (currency < skin.price) return
-      currency -= skin.price
+      const price = getSkinPrice(skin)
+      if (currency < price) return
+      currency -= price
       unlockedSkins.push(skin.id)
     }
     selectedSkin = skin.id
@@ -1073,6 +1088,11 @@ function updateSkinStore() {
     localStorage.setItem('echo-loop-selected-skin', selectedSkin)
     updateSkinStore()
   }))
+}
+
+function getSkinPrice(skin) {
+  const priceSteps = Math.floor(Math.max(best, elapsedTime) / 25)
+  return skin.price + priceSteps * 10
 }
 
 function resize() {
@@ -1236,6 +1256,7 @@ function update(elapsed, delta) {
 
   const difficulty = 1 + Math.floor(elapsed / 30)
   difficultyLevel = difficulty
+  if (Math.floor(elapsed / 25) !== Math.floor((elapsed - delta) / 25)) updateSkinStore()
   const pixelSkinsReady = skins.filter((skin) => skin.character === 'pixel' && Math.max(best, elapsed) >= skin.unlockAfter).length
   if (pixelSkinsReady !== visiblePixelSkinCount) updateSkinStore()
   if (!onlineMode && elapsed >= nextTrapAt) {
@@ -1256,7 +1277,7 @@ function update(elapsed, delta) {
       drift: (Math.random() - 0.5) * (26 + difficulty * 8),
       phase: Math.random() * Math.PI * 2,
       isDecoy: true,
-      skin: onlineMode ? 'zombie' : null,
+      skin: onlineMode ? 'zombie' : 'echo-hunter',
       x: arena.left + 20 + Math.random() * Math.max(20, arena.right - arena.left - 40),
       y: arena.top + 20 + Math.random() * Math.max(20, arena.bottom - arena.top - 40),
       speed: 62 + difficulty * 12,
@@ -1271,6 +1292,7 @@ function update(elapsed, delta) {
       drift: (Math.random() - 0.5) * (26 + difficulty * 8),
       phase: Math.random() * Math.PI * 2,
       isDecoy: false,
+      skin: 'echo-copy',
     })
     nextPatternAt += 10
     echoCountElement.textContent = echoes.length
@@ -1552,10 +1574,11 @@ function draw(elapsed) {
       } else if (trap.type === 'mini-zombie' || trap.type === 'zombie-echo') {
         drawTrapCharacter(trap.x, trap.y, 'zombie', elapsed, trap.type === 'zombie-echo' ? 0.72 : 1)
       } else if (trap.type === 'bird-net') {
+        drawTrapCharacter(trap.x, trap.y, 'bird', elapsed)
         context.beginPath()
-        context.arc(trap.x, trap.y, 9, 0, Math.PI * 2)
-        context.fillStyle = '#d7ff63'
-        context.fill()
+        context.arc(trap.x, trap.y, 18 + Math.sin(elapsed * 4) * 2, 0, Math.PI * 2)
+        context.strokeStyle = '#d7ff63'
+        context.stroke()
       } else {
         context.beginPath()
         context.arc(trap.x, trap.y, trap.radius, 0, Math.PI * 2)
@@ -1592,7 +1615,7 @@ function draw(elapsed) {
   })
   context.globalAlpha = 1
   echoes.forEach((echo) => {
-    if (onlineMode && echo.skin === 'zombie') drawCharacter(echo.x, echo.y, trapSkins.zombie, elapsed, true)
+    if (echo.skin && trapSkins[echo.skin]) drawCharacter(echo.x, echo.y, trapSkins[echo.skin], elapsed, true)
     else drawCircle(echo.x, echo.y, 9, echo.color, true)
   })
   if (onlineMode && remoteControlledEcho && performance.now() - remoteControlledEcho.lastSeen < 3000) {
@@ -1652,11 +1675,38 @@ function drawPixelCharacter(x, y, skin, ghost) {
       const spriteContext = sprite.getContext('2d')
       spriteContext.drawImage(pixelSheet, spriteRect.x, spriteRect.y, spriteRect.width, spriteRect.height, 0, 0, spriteRect.width, spriteRect.height)
       const pixels = spriteContext.getImageData(0, 0, sprite.width, sprite.height)
-      for (let index = 0; index < pixels.data.length; index += 4) {
+      const visited = new Uint8Array(sprite.width * sprite.height)
+      const queue = []
+      const enqueue = (pixelX, pixelY) => {
+        if (pixelX < 0 || pixelY < 0 || pixelX >= sprite.width || pixelY >= sprite.height) return
+        const position = pixelY * sprite.width + pixelX
+        if (visited[position]) return
+        const index = position * 4
         const red = pixels.data[index]
         const green = pixels.data[index + 1]
         const blue = pixels.data[index + 2]
-        if (Math.max(red, green, blue) - Math.min(red, green, blue) < 4 && red > 135 && red < 225) pixels.data[index + 3] = 0
+        const spread = Math.max(red, green, blue) - Math.min(red, green, blue)
+        if (spread > 28 || red < 105 || red > 235) return
+        visited[position] = 1
+        queue.push(pixelX, pixelY)
+      }
+      for (let pixelX = 0; pixelX < sprite.width; pixelX += 1) {
+        enqueue(pixelX, 0)
+        enqueue(pixelX, sprite.height - 1)
+      }
+      for (let pixelY = 1; pixelY < sprite.height - 1; pixelY += 1) {
+        enqueue(0, pixelY)
+        enqueue(sprite.width - 1, pixelY)
+      }
+      for (let index = 0; index < queue.length; index += 2) {
+        const pixelX = queue[index]
+        const pixelY = queue[index + 1]
+        const position = pixelY * sprite.width + pixelX
+        pixels.data[position * 4 + 3] = 0
+        enqueue(pixelX + 1, pixelY)
+        enqueue(pixelX - 1, pixelY)
+        enqueue(pixelX, pixelY + 1)
+        enqueue(pixelX, pixelY - 1)
       }
       spriteContext.putImageData(pixels, 0, 0)
       pixelSpriteCache.set(skin.pixelStyle, sprite)

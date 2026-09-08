@@ -413,6 +413,14 @@ button { font: inherit; }
 .skin-chip[data-character='boss'] .skin-orb::before, .skin-chip[data-character='commander'] .skin-orb::before { border-radius: 2px; }
 .skin-chip span:not(.skin-orb) { overflow: hidden; font: 9px 'DM Mono', monospace; letter-spacing: .3px; text-overflow: ellipsis; }
 .skin-chip small { color: var(--skin-edge); font: 8px 'DM Mono', monospace; }
+.arena-cast { display: flex; align-items: center; gap: 14px; margin: -8px 0 16px; padding: 8px 12px; border: 1px dashed rgba(36, 67, 94, .22); background: rgba(255, 255, 255, .46); }
+.cast-list { display: flex; gap: 7px; flex-wrap: wrap; }
+.cast-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid var(--line); color: var(--muted); background: rgba(255, 255, 255, .72); font: 9px 'DM Mono', monospace; letter-spacing: .5px; }
+.cast-chip::before { content: ''; width: 9px; height: 9px; border-radius: 2px; background: var(--cast-color); box-shadow: 0 0 7px var(--cast-color); }
+.zombie-cast { --cast-color: #78b34d; }
+.wolf-cast { --cast-color: #e11d48; }
+.bird-cast { --cast-color: #f472b6; }
+.axe-cast { --cast-color: #f7c66b; }
 .game-wrap { position: relative; height: min(74svh, 760px); min-height: 480px; overflow: hidden; border: 1px solid var(--line); background: #081116; box-shadow: 0 18px 70px rgba(0, 0, 0, .18); }
 canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
 .game-message, .power-panel { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; text-align: center; background: rgba(5, 12, 16, .45); transition: opacity .3s, visibility .3s; }
@@ -475,6 +483,8 @@ h1 em { color: var(--acid); font-style: normal; }
   .skin-title { flex-basis: 49px; }
   .skin-list { gap: 2px; }
   .skin-chip { flex-basis: 96px; }
+  .arena-cast { align-items: flex-start; flex-direction: column; gap: 7px; margin-top: -4px; }
+  .cast-list { width: 100%; }
   .power-grid { grid-template-columns: 1fr; width: min(280px, 80vw); }
   .power-card { min-height: auto; display: grid; grid-template-columns: 35px 1fr; align-items: center; gap: 3px 8px; }
   .power-icon { grid-row: span 2; }
