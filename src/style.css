@@ -39,6 +39,8 @@ button { font: inherit; }
   gap: 10px;
 }
 .icon-button { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 22px; }
+.back-button { padding: 8px 10px; border: 1px solid var(--line); color: var(--muted); background: transparent; cursor: pointer; font: 10px 'DM Mono', monospace; letter-spacing: 1px; }
+.back-button:hover { border-color: var(--acid); color: var(--acid); }
 .hud { padding: 24px 2px 18px; }
 
 .lobby-panel {

@@ -7,6 +7,7 @@ document.querySelector('#app').innerHTML = `
       <div class="brand"><span class="brand-mark">◌</span><span>ECHO LOOP</span></div>
       <div class="run-type"><span class="live-dot"></span><span id="mode-label">ARENA LIVE</span></div>
       <div class="topbar-actions">
+        <button class="back-button" data-home-button type="button">ATRÁS</button>
         <button class="icon-button" id="sound-button" aria-label="Activar o silenciar sonido">◒</button>
       </div>
     </header>
@@ -261,7 +262,7 @@ function renderOnlineWaitingState(name) {
       <header class="topbar">
         <div class="brand"><span class="brand-mark">◌</span><span>ECHO LOOP</span></div>
         <div class="run-type"><span class="live-dot"></span><span>ARENA LIVE</span></div>
-        <div class="topbar-actions"><button class="icon-button" id="sound-button" aria-label="Activar o silenciar sonido">◒</button></div>
+        <div class="topbar-actions"><button class="back-button" data-home-button type="button">ATRÁS</button><button class="icon-button" id="sound-button" aria-label="Activar o silenciar sonido">◒</button></div>
       </header>
       <section class="lobby-panel online-panel">
         <div class="lobby-copy">
@@ -595,6 +596,15 @@ if (goldBallButton) {
     }
   })
 }
+
+document.addEventListener('click', (event) => {
+  const homeButton = event.target.closest('[data-home-button]')
+  if (!homeButton) return
+  running = false
+  if (presenceInterval) clearInterval(presenceInterval)
+  if (peer) peer.destroy()
+  window.location.reload()
+})
 
 playOnlineButton.addEventListener('click', () => {
   nicknameOverlay.hidden = false
