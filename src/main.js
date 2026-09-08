@@ -938,8 +938,31 @@ function createOnlineTrap(type, born) {
     phase: Math.random() * Math.PI * 2,
     laserAngle: Math.random() * Math.PI * 2,
     laserSpeed: type === 'wolf-laser' ? 0.75 : 0,
+    orbitAngle: Math.random() * Math.PI * 2,
+    orbitSpeed: type === 'axe' ? 0.9 : 0,
+    orbitRadius: type === 'axe' ? 70 : 0,
+    homeX: 0,
+    homeY: 0,
     active: false,
   }
+}
+
+function createLocalTrapSet() {
+  const wolf = createOnlineTrap('wolf-laser', 0)
+  wolf.x = arena.left + (arena.right - arena.left) * 0.25
+  wolf.y = arena.top + (arena.bottom - arena.top) * 0.32
+  wolf.active = true
+  const bird = createOnlineTrap('bird-net', 3)
+  bird.x = arena.left + (arena.right - arena.left) * 0.7
+  bird.y = arena.top + (arena.bottom - arena.top) * 0.62
+  bird.active = true
+  const axe = createOnlineTrap('axe', 6)
+  axe.x = arena.left + (arena.right - arena.left) * 0.52
+  axe.y = arena.top + (arena.bottom - arena.top) * 0.5
+  axe.homeX = axe.x
+  axe.homeY = axe.y
+  axe.active = true
+  return [wolf, bird, axe]
 }
 
 function startRun() {
@@ -972,6 +995,8 @@ function startRun() {
     traps = preparedOnlineTraps
     onlineCountdown = 60
     playBattleAudio()
+  } else {
+    traps = createLocalTrapSet()
   }
   requestAnimationFrame(frame)
 }
@@ -1046,11 +1071,6 @@ function update(elapsed, delta) {
   }
   echoes = echoes.filter((echo) => elapsed - echo.born < 5)
   echoCountElement.textContent = echoes.length
-  if (!onlineMode && elapsed >= 8 && traps.length < Math.floor(elapsed / Math.max(6, 12 - difficulty)) + 1) {
-    const angle = traps.length * 2.4 + 0.8
-    traps.push({ x: (arena.left + arena.right) / 2 + Math.cos(angle) * (arena.right - arena.left) * 0.28, y: (arena.top + arena.bottom) / 2 + Math.sin(angle) * (arena.bottom - arena.top) * 0.28, radius: 26, born: elapsed, speed: 7 + difficulty * 4, memoryDelay: 2 + traps.length * 0.6, phase: Math.random() * Math.PI, laserAngle: Math.random() * Math.PI * 2, laserSpeed: 0.8 + difficulty * 0.12 })
-  }
-
   const invert = activePower === 'invert' && elapsed < powerUntil
   for (const echo of echoes) {
     if (echo.isDecoy) {
@@ -1071,15 +1091,21 @@ function update(elapsed, delta) {
     }
   }
   traps.forEach((trap) => {
-    if (onlineMode) {
+    if (onlineMode || trap.type) {
       if (elapsed < trap.born) return
       trap.active = true
+      trap.homeX ??= trap.x
+      trap.homeY ??= trap.y
+      trap.orbitAngle ??= Math.random() * Math.PI * 2
+      trap.orbitSpeed ??= trap.type === 'axe' ? 0.9 : 0
+      trap.orbitRadius ??= trap.type === 'axe' ? 70 : 0
       if (trap.type === 'wolf-laser' && elapsed - trap.born > 10) {
         trap.type = 'axe'
         trap.homeX = trap.x
         trap.homeY = trap.y
-        trap.phase = 0
-        trap.speed = 180
+        trap.orbitAngle = 0
+        trap.orbitSpeed = 0.9
+        trap.orbitRadius = 70
         trap.laserAngle = 0
       }
       if (trap.type === 'bird-net' && !trap.spawned && elapsed - trap.born > 3) {
@@ -1097,18 +1123,14 @@ function update(elapsed, delta) {
         }
       }
       if (trap.type === 'wolf-laser') {
-        trap.laserAngle += trap.laserSpeed * delta
+        trap.laserAngle += 0.9 * delta
       } else if (trap.type === 'bird-net') {
-        trap.x += Math.cos(elapsed * 1.7 + trap.phase) * 12 * delta
-        trap.y += Math.sin(elapsed * 1.3 + trap.phase) * 12 * delta
+        trap.x += Math.cos(elapsed * 1.15 + trap.phase) * 7 * delta
+        trap.y += Math.sin(elapsed * 0.9 + trap.phase) * 7 * delta
       } else if (trap.type === 'axe') {
-        const targetX = trap.phase === 0 ? (opponent?.x || player.x) : trap.homeX
-        const targetY = trap.phase === 0 ? (opponent?.y || player.y) : trap.homeY
-        const distance = Math.hypot(targetX - trap.x, targetY - trap.y)
-        if (distance < 12) trap.phase = trap.phase === 0 ? 1 : 0
-        const angle = Math.atan2(targetY - trap.y, targetX - trap.x)
-        trap.x += Math.cos(angle) * trap.speed * delta
-        trap.y += Math.sin(angle) * trap.speed * delta
+        trap.orbitAngle += trap.orbitSpeed * delta
+        trap.x = trap.homeX + Math.cos(trap.orbitAngle) * trap.orbitRadius
+        trap.y = trap.homeY + Math.sin(trap.orbitAngle) * trap.orbitRadius
       } else if (trap.type === 'zombie-echo') {
         const echoTime = Math.max(0, elapsed - trap.memoryDelay)
         const remembered = history.reduce((closest, point) => Math.abs(point.time - echoTime) < Math.abs(closest.time - echoTime) ? point : closest, history[0])
@@ -1168,7 +1190,7 @@ function detectCollisions(elapsed) {
   if (elapsed < powerGraceUntil) return
   const collisionTraps = onlineMode ? [...traps, ...remoteTraps] : traps
   for (const trap of collisionTraps) {
-    if (onlineMode) {
+    if (onlineMode || trap.type) {
       if (!trap.active) continue
       if (trap.type === 'wolf-laser') {
         const laserLength = Math.max(arena.right - arena.left, arena.bottom - arena.top)
@@ -1255,7 +1277,7 @@ function draw(elapsed) {
   context.setLineDash([])
   const visibleTraps = onlineMode ? [...traps, ...remoteTraps] : traps
   visibleTraps.forEach((trap) => {
-    if (onlineMode) {
+    if (onlineMode || trap.type) {
       if (!trap.active) return
       const color = trap.type === 'wolf-laser' ? '#ff304f' : trap.type === 'zombie-echo' ? '#8dff70' : trap.type === 'axe' ? '#f7c66b' : '#d7ff63'
       context.globalAlpha = 0.82
@@ -1270,14 +1292,21 @@ function draw(elapsed) {
         context.stroke()
         drawTrapCharacter(trap.x, trap.y, 'wolf', elapsed)
       } else if (trap.type === 'axe') {
+        drawTrapCharacter(trap.x, trap.y, 'axe', elapsed)
         context.save()
         context.translate(trap.x, trap.y)
-        context.rotate(Math.atan2((opponent?.y || player.y) - trap.y, (opponent?.x || player.x) - trap.x))
+        context.rotate(trap.orbitAngle || Math.atan2((opponent?.y || player.y) - trap.y, (opponent?.x || player.x) - trap.x))
         context.fillRect(-12, -2, 24, 4)
         context.fillRect(5, -9, 8, 18)
         context.restore()
       } else if (trap.type === 'mini-zombie' || trap.type === 'zombie-echo') {
         drawTrapCharacter(trap.x, trap.y, 'zombie', elapsed, trap.type === 'zombie-echo' ? 0.72 : 1)
+      } else if (trap.type === 'bird-net') {
+        drawTrapCharacter(trap.x, trap.y, 'bird', elapsed)
+        context.fillStyle = '#d7ff63'
+        context.font = '9px DM Mono, monospace'
+        context.textAlign = 'center'
+        context.fillText('PAJARO', trap.x, trap.y - 24)
       } else {
         context.beginPath()
         context.arc(trap.x, trap.y, trap.radius, 0, Math.PI * 2)
