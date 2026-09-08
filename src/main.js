@@ -132,7 +132,7 @@ if (onlineChannel) {
       return
     }
     if (state.type !== 'player-state') return
-    opponent = { id: state.id, name: state.name || 'RIVAL', x: state.x, y: state.y, lastSeen: performance.now() }
+    opponent = { id: state.id, name: state.name || 'RIVAL', skin: state.skin || 'retro', x: state.x, y: state.y, lastSeen: performance.now() }
   })
 }
 
@@ -186,7 +186,7 @@ function attachPeerConnection(connection, name) {
   })
   connection.on('data', (message) => {
     if (!message || message.type !== 'player-state') return
-    opponent = { id: connection.peer, name: message.name || 'RIVAL', x: message.x, y: message.y, lastSeen: performance.now() }
+    opponent = { id: connection.peer, name: message.name || 'RIVAL', skin: message.skin || 'retro', x: message.x, y: message.y, lastSeen: performance.now() }
     if (Array.isArray(message.traps)) remoteTraps = message.traps
     onlinePeers.set(connection.peer, { id: connection.peer, name: opponent.name, lastSeen: performance.now() })
     updateOnlinePlayersDisplay()
@@ -637,18 +637,18 @@ const powers = [
   { id: 'invert', title: 'ESPEJO ROTO', text: 'Los ecos invierten su dirección durante 2 segundos.', icon: '↔' },
 ]
 const skins = [
-  { id: 'retro', name: 'RETRO', price: 0, core: '#20a4ff', edge: '#b8e9ff', role: 'CONSTRUCTOR AZUL' },
-  { id: 'plasma', name: 'PLASMA', price: 20, core: '#a855f7', edge: '#f0abfc', role: 'ECO VIOLETA' },
-  { id: 'candy', name: 'CANDY', price: 40, core: '#f472b6', edge: '#ffe4f3', role: 'PAJARO' },
-  { id: 'matrix', name: 'MATRIX', price: 70, core: '#52d11c', edge: '#d4ff7c', role: 'ECO VERDE' },
-  { id: 'glitch', name: 'GLITCH', price: 100, core: '#f43f5e', edge: '#22d3ee', role: 'HACHA' },
-  { id: 'void', name: 'VOID', price: 140, core: '#241238', edge: '#c084fc', role: 'ZOMBI' },
-  { id: 'laser', name: 'LASER', price: 190, core: '#e11d48', edge: '#fb7185', role: 'LOBO' },
-  { id: 'gold', name: 'GOLD', price: 250, core: '#e19b18', edge: '#fff0a8', role: 'GUERRERO' },
-  { id: 'nebula', name: 'NEBULA', price: 320, core: '#5b21b6', edge: '#e9d5ff', role: 'ECO OSCURO' },
-  { id: 'firewall', name: 'FIREWALL', price: 400, core: '#ea580c', edge: '#fed7aa', role: 'CASCO NARANJA' },
-  { id: 'frost', name: 'FROST', price: 500, core: '#0ea5e9', edge: '#dff8ff', role: 'SUPER VELOCIDAD' },
-  { id: 'toxic', name: 'TOXIC', price: 650, core: '#3f9d16', edge: '#b8ff5b', role: 'ZOMBI TOXICO' },
+  { id: 'retro', name: 'SCOUT', price: 0, core: '#20a4ff', edge: '#b8e9ff', role: 'EXPLORADOR', character: 'scout' },
+  { id: 'plasma', name: 'ENGINEER', price: 20, core: '#a855f7', edge: '#f0abfc', role: 'CASCO NARANJA', character: 'engineer' },
+  { id: 'candy', name: 'BIRD', price: 40, core: '#f472b6', edge: '#ffe4f3', role: 'TRAMPAS AEREAS', character: 'bird' },
+  { id: 'matrix', name: 'RANGER', price: 70, core: '#52d11c', edge: '#d4ff7c', role: 'RASTREADOR', character: 'ranger' },
+  { id: 'glitch', name: 'AXE', price: 100, core: '#f43f5e', edge: '#22d3ee', role: 'LANZA HACHA', character: 'axe' },
+  { id: 'void', name: 'ZOMBIE', price: 140, core: '#241238', edge: '#c084fc', role: 'ECO DEL PASADO', character: 'zombie' },
+  { id: 'laser', name: 'WOLF', price: 190, core: '#e11d48', edge: '#fb7185', role: 'LASER INICIAL', character: 'wolf' },
+  { id: 'gold', name: 'COMMANDER', price: 250, core: '#e19b18', edge: '#fff0a8', role: 'GUERRERO', character: 'commander' },
+  { id: 'nebula', name: 'NINJA', price: 320, core: '#5b21b6', edge: '#e9d5ff', role: 'ECO OSCURO', character: 'ninja' },
+  { id: 'firewall', name: 'MEDIC', price: 400, core: '#ea580c', edge: '#fed7aa', role: 'RESISTENCIA', character: 'medic' },
+  { id: 'frost', name: 'SPEED', price: 500, core: '#0ea5e9', edge: '#dff8ff', role: 'SUPER VELOCIDAD', character: 'speed' },
+  { id: 'toxic', name: 'TOXIC', price: 650, core: '#3f9d16', edge: '#b8ff5b', role: 'ZOMBI TOXICO', character: 'toxic' },
 ]
 
 let width = 0
@@ -823,7 +823,7 @@ function update(elapsed, delta) {
   player.x += (player.targetX - player.x) * smoothing
   player.y += (player.targetY - player.y) * smoothing
   if (onlineMode && performance.now() - lastOnlineBroadcast > 50) {
-    const state = { type: 'player-state', id: localPlayerId, name: localStorage.getItem('echo-loop-player-name') || 'JUGADOR', x: player.x, y: player.y, traps: onlineMode ? traps.map(({ type, x, y, radius, born, laserAngle, active }) => ({ type, x, y, radius, born, laserAngle, active })) : [] }
+    const state = { type: 'player-state', id: localPlayerId, name: localStorage.getItem('echo-loop-player-name') || 'JUGADOR', skin: selectedSkin, x: player.x, y: player.y, traps: onlineMode ? traps.map(({ type, x, y, radius, born, laserAngle, active }) => ({ type, x, y, radius, born, laserAngle, active })) : [] }
     if (onlineChannel) onlineChannel.postMessage(state)
     if (peerConnection?.open) peerConnection.send(state)
     lastOnlineBroadcast = performance.now()
@@ -1095,7 +1095,7 @@ function draw(elapsed) {
   echoes.forEach((echo) => drawCircle(echo.x, echo.y, 9, echo.color, true))
   particles.forEach((particle) => drawCircle(particle.x, particle.y, 2, particle.color, false))
   if (onlineMode && opponent && performance.now() - opponent.lastSeen < 3000) {
-    drawCircle(opponent.x, opponent.y, playerRadius + 1, '#ff8a65', true)
+    drawCharacter(opponent.x, opponent.y, skins.find((skin) => skin.id === opponent.skin) || skins[0], elapsed, true)
     context.fillStyle = '#ffcfbf'
     context.font = '10px DM Mono, monospace'
     context.textAlign = 'center'
@@ -1114,33 +1114,50 @@ function draw(elapsed) {
 
 function drawPlayer(elapsed) {
   const skin = skins.find((item) => item.id === selectedSkin) || skins[0]
-  const orbGradient = context.createRadialGradient(player.x - 3, player.y - 4, 1, player.x, player.y, playerRadius + 7)
-  orbGradient.addColorStop(0, skin.edge)
-  orbGradient.addColorStop(0.5, skin.core)
-  orbGradient.addColorStop(1, '#050b0f')
-  context.fillStyle = orbGradient
-  context.shadowBlur = 25
+  drawCharacter(player.x, player.y, skin, elapsed, false)
+}
+
+function drawCharacter(x, y, skin, elapsed, ghost) {
+  const alpha = ghost ? 0.68 : 1
+  context.save()
+  context.globalAlpha = alpha
+  context.shadowBlur = ghost ? 12 : 22
   context.shadowColor = skin.edge
-  context.beginPath(); context.arc(player.x, player.y, playerRadius + (selectedSkin === 'gold' ? 2 : 0), 0, Math.PI * 2); context.fill()
+  context.fillStyle = skin.core
+  context.strokeStyle = skin.edge
+  context.lineWidth = 2
+  context.fillRect(x - 7, y - 3, 14, 13)
+  context.fillStyle = skin.edge
+  context.fillRect(x - 6, y - 15, 12, 11)
+  context.fillStyle = skin.core
+  context.fillRect(x - 10, y + 9, 7, 9)
+  context.fillRect(x + 3, y + 9, 7, 9)
   context.shadowBlur = 0
-  if (selectedSkin === 'matrix') {
+  if (skin.character === 'engineer' || skin.character === 'speed') {
     context.fillStyle = skin.edge
-    context.font = '7px DM Mono, monospace'
-    context.textAlign = 'center'
-    context.fillText('01', player.x, player.y + 3)
-  } else if (selectedSkin === 'laser') {
-    context.strokeStyle = skin.edge
-    context.lineWidth = 2
-    context.beginPath(); context.moveTo(player.x - 9, player.y + 7); context.lineTo(player.x + 9, player.y - 7); context.stroke()
-  } else if (selectedSkin === 'glitch') {
+    context.fillRect(x - 9, y - 18, 18, 4)
+    context.fillRect(x - 6, y - 21, 12, 3)
+  } else if (skin.character === 'zombie' || skin.character === 'toxic') {
+    context.fillStyle = '#78b34d'
+    context.fillRect(x - 5, y - 12, 3, 3)
+    context.fillRect(x + 3, y - 12, 3, 3)
+  } else if (skin.character === 'bird') {
     context.fillStyle = skin.edge
-    context.fillRect(player.x - 12, player.y - 2, 5, 2)
-    context.fillRect(player.x + 7, player.y + 3, 6, 2)
-  } else if (selectedSkin === 'gold') {
+    context.beginPath(); context.moveTo(x + 6, y - 7); context.lineTo(x + 15, y - 12); context.lineTo(x + 8, y - 2); context.fill()
+  } else if (skin.character === 'wolf') {
+    context.beginPath(); context.moveTo(x - 8, y - 14); context.lineTo(x - 5, y - 22); context.lineTo(x, y - 15); context.lineTo(x + 6, y - 22); context.lineTo(x + 9, y - 14); context.stroke()
+  } else if (skin.character === 'axe') {
+    context.fillStyle = skin.edge
+    context.fillRect(x + 9, y - 7, 3, 18)
+    context.fillRect(x + 10, y - 9, 7, 5)
+  } else if (skin.character === 'ninja') {
+    context.fillStyle = '#050b0f'
+    context.fillRect(x - 7, y - 10, 14, 4)
+  } else if (skin.character === 'commander') {
     context.strokeStyle = skin.edge
-    context.lineWidth = 2
-    context.beginPath(); context.arc(player.x, player.y, 15 + Math.sin(elapsed * 3), 0, Math.PI * 2); context.stroke()
+    context.beginPath(); context.arc(x, y, 18 + Math.sin(elapsed * 3), 0, Math.PI * 2); context.stroke()
   }
+  context.restore()
 }
 
 function drawCircle(x, y, radius, color, ghost) {
