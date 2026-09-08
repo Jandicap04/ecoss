@@ -981,6 +981,18 @@ const skins = [
   { id: 'commando', name: 'COMMANDO', price: 1800, core: '#365314', edge: '#bef264', role: 'CAZADOR ELITE', character: 'commando' },
   { id: 'shadow', name: 'SHADOW', price: 2200, core: '#18181b', edge: '#a1a1aa', role: 'ECO INVISIBLE', character: 'shadow' },
   { id: 'boss', name: 'BOSS', price: 2800, core: '#7f1d1d', edge: '#fbbf24', role: 'JEFE FINAL', character: 'boss' },
+  { id: 'pixel-red', name: 'PIXEL RED', price: 3000, unlockAfter: 100, core: '#b9362f', edge: '#f6b24b', role: 'GUERRERO PIXEL', character: 'pixel', pixelStyle: 0 },
+  { id: 'pixel-agent', name: 'PIXEL AGENT', price: 3200, unlockAfter: 110, core: '#303b49', edge: '#e5a26f', role: 'AGENTE PIXEL', character: 'pixel', pixelStyle: 1 },
+  { id: 'pixel-cyan', name: 'PIXEL CYAN', price: 3400, unlockAfter: 120, core: '#2b7890', edge: '#bce8ee', role: 'TECNICO PIXEL', character: 'pixel', pixelStyle: 2 },
+  { id: 'pixel-bandit', name: 'PIXEL BANDIT', price: 3600, unlockAfter: 130, core: '#775044', edge: '#e2a476', role: 'BANDIDO PIXEL', character: 'pixel', pixelStyle: 3 },
+  { id: 'pixel-rider', name: 'PIXEL RIDER', price: 3800, unlockAfter: 140, core: '#b96f43', edge: '#e9c09d', role: 'NOMADA PIXEL', character: 'pixel', pixelStyle: 4 },
+  { id: 'pixel-mask', name: 'PIXEL MASK', price: 4000, unlockAfter: 150, core: '#d98813', edge: '#f7c94d', role: 'MASCARA PIXEL', character: 'pixel', pixelStyle: 5 },
+  { id: 'pixel-shadow', name: 'PIXEL SHADOW', price: 4200, unlockAfter: 160, core: '#24252f', edge: '#777889', role: 'SOMBRA PIXEL', character: 'pixel', pixelStyle: 6 },
+  { id: 'pixel-guard', name: 'PIXEL GUARD', price: 4400, unlockAfter: 170, core: '#46414a', edge: '#b6aeb0', role: 'GUARDIA PIXEL', character: 'pixel', pixelStyle: 7 },
+  { id: 'pixel-soldier', name: 'PIXEL SOLDIER', price: 4600, unlockAfter: 180, core: '#4d4b48', edge: '#b7b3a8', role: 'SOLDADO PIXEL', character: 'pixel', pixelStyle: 8 },
+  { id: 'pixel-tech', name: 'PIXEL TECH', price: 4800, unlockAfter: 190, core: '#263844', edge: '#d2e7e7', role: 'TECNICO PIXEL', character: 'pixel', pixelStyle: 9 },
+  { id: 'pixel-heavy', name: 'PIXEL HEAVY', price: 5000, unlockAfter: 200, core: '#353942', edge: '#979ba4', role: 'PESADO PIXEL', character: 'pixel', pixelStyle: 10 },
+  { id: 'pixel-rogue', name: 'PIXEL ROGUE', price: 5200, unlockAfter: 210, core: '#26262c', edge: '#746e72', role: 'NINJA PIXEL', character: 'pixel', pixelStyle: 11 },
 ]
 
 let width = 0
@@ -1013,13 +1025,17 @@ let powerUntil = 0
 let powerGraceUntil = 0
 let onlineBoosted = false
 let onlineLastEliminationAt = 0
+let visiblePixelSkinCount = 0
 
 bestElement.textContent = best.toFixed(1).padStart(4, '0')
 updateSkinStore()
 
 function updateSkinStore() {
   currencyElement.textContent = `${currency}⌁`
-  skinList.innerHTML = skins.map((skin) => {
+  const progressTime = Math.max(best, elapsedTime)
+  const visibleSkins = skins.filter((skin) => !skin.unlockAfter || progressTime >= skin.unlockAfter || unlockedSkins.includes(skin.id))
+  visiblePixelSkinCount = visibleSkins.filter((skin) => skin.character === 'pixel').length
+  skinList.innerHTML = visibleSkins.map((skin) => {
     const unlocked = unlockedSkins.includes(skin.id)
     const selected = selectedSkin === skin.id
     const label = selected ? 'USANDO' : unlocked ? 'ELEGIR' : `${skin.price}⌁`
@@ -1027,6 +1043,7 @@ function updateSkinStore() {
   }).join('')
   skinList.querySelectorAll('.skin-chip').forEach((button) => button.addEventListener('click', () => {
     const skin = skins.find((item) => item.id === button.dataset.skin)
+    if (skin.unlockAfter && Math.max(best, elapsedTime) < skin.unlockAfter) return
     if (!unlockedSkins.includes(skin.id)) {
       if (currency < skin.price) return
       currency -= skin.price
@@ -1201,6 +1218,8 @@ function update(elapsed, delta) {
 
   const difficulty = 1 + Math.floor(elapsed / 30)
   difficultyLevel = difficulty
+  const pixelSkinsReady = skins.filter((skin) => skin.character === 'pixel' && Math.max(best, elapsed) >= skin.unlockAfter).length
+  if (pixelSkinsReady !== visiblePixelSkinCount) updateSkinStore()
   if (!onlineMode && elapsed >= nextTrapAt) {
     traps.push(createRandomLocalTrap(elapsed, difficulty))
     nextTrapAt += 15
@@ -1604,6 +1623,37 @@ function drawTrapCharacter(x, y, character, elapsed, opacity = 1) {
   context.restore()
 }
 
+function drawPixelCharacter(x, y, skin, ghost) {
+  const scale = ghost ? 1.7 : 2.1
+  const pixel = (offsetX, offsetY, pixelWidth, pixelHeight, color) => {
+    context.fillStyle = color
+    context.fillRect(x + offsetX * scale, y + offsetY * scale, pixelWidth * scale, pixelHeight * scale)
+  }
+  const style = skin.pixelStyle || 0
+  const dark = '#24252b'
+  const face = style === 5 ? skin.edge : '#d99b75'
+  context.save()
+  context.globalAlpha = ghost ? 0.62 : 1
+  context.shadowBlur = ghost ? 8 : 14
+  context.shadowColor = skin.edge
+  pixel(-7, 10, 5, 7, dark)
+  pixel(2, 10, 5, 7, dark)
+  pixel(-7, 1, 14, 10, skin.core)
+  pixel(-5, -7, 10, 8, face)
+  pixel(-7, -5, 14, 3, style === 6 || style === 11 ? dark : skin.edge)
+  pixel(-5, -3, 2, 2, dark)
+  pixel(3, -3, 2, 2, dark)
+  if (style === 0 || style === 8) pixel(-7, -10, 14, 3, skin.core)
+  if (style === 1 || style === 3 || style === 7) pixel(-8, -9, 16, 3, dark)
+  if (style === 2 || style === 9) pixel(-8, -10, 16, 3, skin.edge)
+  if (style === 4) pixel(5, -7, 5, 3, skin.edge)
+  if (style === 5) pixel(-7, -5, 14, 5, skin.edge)
+  if (style === 6 || style === 11) pixel(-5, -1, 10, 2, skin.edge)
+  if (style === 7 || style === 10) pixel(-9, 0, 18, 12, skin.edge)
+  if (style === 9) pixel(2, 3, 4, 3, '#66e2e2')
+  context.restore()
+}
+
 function drawCharacter(x, y, skin, elapsed, ghost) {
   const alpha = ghost ? 0.62 : 1
   const scale = ghost ? 0.86 : 1
@@ -1611,6 +1661,11 @@ function drawCharacter(x, y, skin, elapsed, ghost) {
   const bodyHeight = 16 * scale
   const headRadius = 7 * scale
   context.save()
+  if (skin.character === 'pixel') {
+    drawPixelCharacter(x, y, skin, ghost)
+    context.restore()
+    return
+  }
   context.globalAlpha = alpha
   context.shadowBlur = ghost ? 14 : 26
   context.shadowColor = skin.edge
