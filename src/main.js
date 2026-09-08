@@ -20,6 +20,16 @@ document.querySelector('#app').innerHTML = `
         <button class="ghost-button" id="sim-button" type="button">JUGAR ONLINE</button>
       </div>
     </section>
+    <div class="nickname-overlay" id="nickname-overlay" hidden>
+      <form class="nickname-card" id="nickname-form">
+        <span class="eyebrow">IDENTIDAD DE COMBATE</span>
+        <h2>Elige tu apodo</h2>
+        <p>Tu nombre aparecerá en el lobby mientras buscas rival.</p>
+        <label for="nickname-input">APODO</label>
+        <input id="nickname-input" name="nickname" maxlength="16" autocomplete="nickname" placeholder="Ej. Echo_01" required />
+        <button class="primary-button" type="submit"><span>ENTRAR AL LOBBY</span><span>→</span></button>
+      </form>
+    </div>
 
     <section class="hud" aria-label="Estado de la partida">
       <div><span class="hud-label">TIEMPO</span><strong id="time">00.0</strong></div>
@@ -67,6 +77,9 @@ const goldBallButton = document.querySelector('#gold-ball')
 const skinList = document.querySelector('#skin-list')
 const currencyElement = document.querySelector('#currency')
 const playOnlineButton = document.querySelector('#play-online-button')
+const nicknameOverlay = document.querySelector('#nickname-overlay')
+const nicknameForm = document.querySelector('#nickname-form')
+const nicknameInput = document.querySelector('#nickname-input')
 
 let secretClickCount = 0
 let secretTimer = null
@@ -79,7 +92,7 @@ function getOnlineRoomState() {
   try {
     const stored = JSON.parse(localStorage.getItem('echo-loop-online-room') || '{"players":[],"updatedAt":0}')
     return {
-      players: Array.isArray(stored.players) ? stored.players : [],
+      players: Array.isArray(stored.players) ? stored.players.map((player) => typeof player === 'string' ? { id: player, name: 'RIVAL' } : player).filter((player) => player && player.id) : [],
       updatedAt: Number(stored.updatedAt || 0),
       startedAt: Number(stored.startedAt || 0),
     }
@@ -88,18 +101,25 @@ function getOnlineRoomState() {
   }
 }
 
-function registerOnlinePlayer() {
+function escapeHtml(value) {
+  return String(value).replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]))
+}
+
+function registerOnlinePlayer(name) {
   const room = getOnlineRoomState()
   const playerId = localStorage.getItem('echo-loop-player-id') || `player-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   localStorage.setItem('echo-loop-player-id', playerId)
-  const players = Array.from(new Set([...(room.players || []), playerId])).slice(-2)
+  localStorage.setItem('echo-loop-player-name', name)
+  const players = [...(room.players || []).filter((player) => player.id !== playerId), { id: playerId, name }].slice(-2)
   const nextRoom = { players, updatedAt: Date.now(), startedAt: players.length >= 2 ? Date.now() + 60000 : 0 }
   localStorage.setItem('echo-loop-online-room', JSON.stringify(nextRoom))
   return nextRoom
 }
 
-function renderOnlineWaitingState() {
-  const room = registerOnlinePlayer()
+function renderOnlineWaitingState(name) {
+  const playerName = name || localStorage.getItem('echo-loop-player-name') || 'JUGADOR'
+  const room = registerOnlinePlayer(playerName)
+  const playerRows = room.players.map((player, index) => `<div class="online-player"><span class="player-status"></span><strong>${escapeHtml(player.name)}</strong><small>${index === 0 ? 'JUGADOR 1' : 'JUGADOR 2'}</small></div>`).join('')
   document.querySelector('#app').innerHTML = `
     <main class="shell">
       <header class="topbar">
@@ -114,6 +134,7 @@ function renderOnlineWaitingState() {
           <p>Se conectará cuando haya dos personas en la arena. Las trampas y los ecos se activan automáticamente al inicio del duelo.</p>
         </div>
         <div class="lobby-actions">
+          <div class="online-players" id="online-players">${playerRows}</div>
           <div class="timer-box"><span>PREP</span><strong id="online-timer">60</strong></div>
         </div>
       </section>
@@ -179,8 +200,8 @@ function renderOnlineWaitingState() {
   }, { once: true })
 }
 
-function startOnlineArena() {
-  const room = getOnlineRoomState()
+function startOnlineArena(name) {
+  const room = registerOnlinePlayer(name || localStorage.getItem('echo-loop-player-name') || 'JUGADOR')
   if (room.players.length >= 2) {
     onlineMode = true
     onlineCountdown = 60
@@ -188,7 +209,7 @@ function startOnlineArena() {
     startRun()
     return
   }
-  renderOnlineWaitingState()
+  renderOnlineWaitingState(name)
 }
 
 function renderSecretPage() {
@@ -415,7 +436,17 @@ if (goldBallButton) {
 }
 
 playOnlineButton.addEventListener('click', () => {
-  startOnlineArena()
+  nicknameOverlay.hidden = false
+  nicknameInput.value = localStorage.getItem('echo-loop-player-name') || ''
+  nicknameInput.focus()
+})
+
+nicknameForm.addEventListener('submit', (event) => {
+  event.preventDefault()
+  const name = nicknameInput.value.trim().replace(/\s+/g, ' ').slice(0, 16)
+  if (!name) return
+  nicknameOverlay.hidden = true
+  startOnlineArena(name)
 })
 
 const delay = 5

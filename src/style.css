@@ -81,6 +81,45 @@ button { font: inherit; }
   letter-spacing: 1.2px;
   text-transform: uppercase;
 }
+.nickname-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(3, 9, 13, 0.78);
+  backdrop-filter: blur(8px);
+}
+.nickname-overlay[hidden] { display: none; }
+.nickname-card {
+  width: min(420px, 100%);
+  padding: 28px;
+  border: 1px solid var(--line);
+  background: #0b171e;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .35);
+}
+.nickname-card h2 { margin: 12px 0 8px; font-size: 30px; }
+.nickname-card p { margin: 0 0 24px; color: var(--muted); line-height: 1.5; }
+.nickname-card label { display: block; margin-bottom: 8px; color: var(--muted); font: 10px 'DM Mono', monospace; letter-spacing: 1.5px; }
+.nickname-card input {
+  width: 100%;
+  margin-bottom: 16px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  outline: none;
+  color: var(--ink);
+  background: #071016;
+  font: 14px 'DM Mono', monospace;
+}
+.nickname-card input:focus { border-color: var(--acid); box-shadow: 0 0 0 3px rgba(215, 255, 99, .1); }
+.online-players { display: flex; gap: 8px; flex-wrap: wrap; }
+.online-player { min-width: 140px; padding: 10px 12px; border: 1px solid var(--line); background: rgba(215, 255, 99, .04); }
+.online-player strong, .online-player small { display: block; }
+.online-player strong { margin: 4px 0; font-size: 14px; }
+.online-player small { color: var(--muted); font: 9px 'DM Mono', monospace; letter-spacing: 1px; }
+.player-status { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--acid); box-shadow: 0 0 10px var(--acid); }
+.online-panel .lobby-actions { justify-content: flex-end; }
 
 
 .secret-shell {
