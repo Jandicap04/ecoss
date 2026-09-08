@@ -130,6 +130,20 @@ button { font: inherit; }
 .room-panel { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 10px; padding: 12px 16px; border: 1px solid var(--line); background: rgba(7, 16, 22, .7); }
 .room-panel strong { display: block; margin-top: 5px; color: var(--ink); font: 500 15px 'DM Mono', monospace; letter-spacing: 1px; }
 .room-panel > span { color: var(--muted); font: 10px 'DM Mono', monospace; letter-spacing: 1px; }
+.online-setup { display: grid; grid-template-columns: 1.2fr 2fr auto; align-items: center; gap: 18px; margin-top: 10px; padding: 14px 16px; border: 1px solid rgba(215,255,99,.28); background: rgba(20, 34, 25, .74); }
+.online-setup[hidden] { display: none; }
+.setup-heading strong, .setup-heading small { display: block; }
+.setup-heading strong { margin: 5px 0; font-size: 14px; letter-spacing: .5px; }
+.setup-heading small { color: var(--muted); font: 10px 'DM Mono', monospace; }
+.setup-heading b { color: var(--acid); }
+.trap-choice-list { display: flex; gap: 8px; }
+.trap-choice { min-width: 100px; padding: 9px 10px; border: 1px solid var(--line); color: var(--muted); background: rgba(5, 12, 16, .65); cursor: pointer; text-align: left; }
+.trap-choice.selected, .trap-choice:hover { border-color: var(--acid); color: var(--ink); background: rgba(215,255,99,.08); }
+.trap-choice span, .trap-choice strong, .trap-choice small { display: block; }
+.trap-choice span { color: var(--acid); font-size: 16px; }
+.trap-choice strong { margin: 4px 0 2px; font: 10px 'DM Mono', monospace; letter-spacing: 1px; }
+.trap-choice small { color: var(--muted); font-size: 10px; }
+.setup-start-button { white-space: nowrap; }
 
 
 .secret-shell {

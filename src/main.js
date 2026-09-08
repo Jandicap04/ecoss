@@ -106,6 +106,11 @@ let peer = null
 let peerConnection = null
 let peerRoomCode = ''
 let peerIsConnected = false
+let onlineSetupActive = false
+let onlineSelectedTrap = 'bird-net'
+let onlineSetupTraps = []
+let onlineSetupTimer = null
+let onlineSetupDraw = null
 const onlineChannel = 'BroadcastChannel' in window ? new BroadcastChannel('echo-loop-live-arena') : null
 const presenceKeyPrefix = 'echo-loop-online-player-'
 
@@ -167,12 +172,61 @@ function updatePeerRoomDisplay(message = 'ESPERANDO CONEXIÓN P2P') {
 }
 
 function startPeerMatch() {
-  if (peerIsConnected || onlineMode) return
+  if (peerIsConnected || onlineSetupActive || onlineMode) return
   peerIsConnected = true
+  if (presenceInterval) clearInterval(presenceInterval)
+  showOnlineTrapSetup()
+}
+
+function showOnlineTrapSetup() {
+  onlineSetupActive = true
+  onlineSetupTraps = []
+  const setupPanel = document.querySelector('#online-setup')
+  if (setupPanel) setupPanel.hidden = false
+  updatePeerRoomDisplay('ELIGE Y COLOCA TUS TRAMPAS')
+  const startButton = document.querySelector('#online-start-button')
+  const countdown = document.querySelector('#online-setup-countdown')
+  if (onlineSetupTimer) clearInterval(onlineSetupTimer)
+  let remaining = 5
+  if (countdown) countdown.textContent = remaining
+  onlineSetupTimer = setInterval(() => {
+    remaining -= 1
+    if (countdown) countdown.textContent = remaining
+    if (remaining <= 0) beginOnlineMatch()
+  }, 1000)
+  startButton?.addEventListener('click', beginOnlineMatch, { once: true })
+  document.querySelectorAll('[data-trap-choice]').forEach((button) => button.addEventListener('click', () => {
+    onlineSelectedTrap = button.dataset.trapChoice
+    document.querySelectorAll('[data-trap-choice]').forEach((item) => item.classList.toggle('selected', item === button))
+  }))
+}
+
+function placeOnlineTrap(event) {
+  if (!onlineSetupActive || !canvas) return false
+  const bounds = canvas.getBoundingClientRect()
+  const point = event.touches ? event.touches[0] : event
+  onlineSetupTraps.push({ type: onlineSelectedTrap, x: point.clientX - bounds.left, y: point.clientY - bounds.top, radius: onlineSelectedTrap === 'bird-net' ? 34 : 26, born: 0, active: true, laserAngle: 0 })
+  onlineSetupDraw?.()
+  return true
+}
+
+function beginOnlineMatch() {
+  if (!onlineSetupActive) return
+  onlineSetupActive = false
+  if (onlineSetupTimer) clearInterval(onlineSetupTimer)
+  if (!onlineSetupTraps.length) {
+    onlineSetupTraps = [
+      { type: 'bird-net', x: width * .25, y: height * .35, radius: 34, born: 0, active: true, laserAngle: 0 },
+      { type: 'wolf-laser', x: width * .7, y: height * .55, radius: 26, born: 0, active: true, laserAngle: .4 },
+      { type: 'axe', x: width * .45, y: height * .72, radius: 26, born: 0, active: true, laserAngle: 0 },
+    ]
+  }
+  const setupPanel = document.querySelector('#online-setup')
+  if (setupPanel) setupPanel.hidden = true
   onlineMode = true
   onlineMatchActive = true
   onlineCountdown = 60
-  if (presenceInterval) clearInterval(presenceInterval)
+  updatePeerRoomDisplay('PERSEGUIR AL RIVAL')
   startRun()
 }
 
@@ -280,6 +334,15 @@ function renderOnlineWaitingState(name) {
         <div><span class="eyebrow">SALA P2P GRATUITA</span><strong id="online-room-code">GENERANDO...</strong></div>
         <span id="online-connection-status">ESPERANDO CONEXIÓN P2P</span>
       </section>
+      <section class="online-setup" id="online-setup" hidden>
+        <div class="setup-heading"><span class="eyebrow">FASE DE PREPARACIÓN</span><strong>COLOCA TUS TRAMPAS</strong><small>Elige una y toca el mapa. Inicio automático en <b id="online-setup-countdown">5</b>s.</small></div>
+        <div class="trap-choice-list">
+          <button class="trap-choice selected" data-trap-choice="bird-net" type="button"><span>◆</span><strong>PÁJARO</strong><small>Red móvil</small></button>
+          <button class="trap-choice" data-trap-choice="wolf-laser" type="button"><span>◢</span><strong>LOBO</strong><small>Láser inicial</small></button>
+          <button class="trap-choice" data-trap-choice="axe" type="button"><span>╱</span><strong>HACHA</strong><small>Persigue al eco</small></button>
+        </div>
+        <button class="primary-button setup-start-button" id="online-start-button" type="button"><span>EMPEZAR</span><span>→</span></button>
+      </section>
       <section class="game-wrap online-match-wrap">
         <canvas id="game" aria-label="Arena de preparación online."></canvas>
       </section>
@@ -310,7 +373,16 @@ function renderOnlineWaitingState(name) {
       waitingContext.font = "700 22px 'DM Mono', monospace"
       waitingContext.textAlign = 'center'
       waitingContext.fillText('RIVAL EN BUSCA...', width / 2, height / 2)
+      if (onlineSetupActive) {
+        onlineSetupTraps.forEach((trap) => {
+          waitingContext.fillStyle = trap.type === 'wolf-laser' ? '#ff304f' : trap.type === 'axe' ? '#f7c66b' : '#d7ff63'
+          waitingContext.beginPath()
+          waitingContext.arc(trap.x, trap.y, trap.radius, 0, Math.PI * 2)
+          waitingContext.fill()
+        })
+      }
     }
+    onlineSetupDraw = drawWaiting
     drawWaiting()
   }
 
@@ -768,6 +840,7 @@ function createOnlineTrap(type, born) {
 }
 
 function startRun() {
+  const preparedOnlineTraps = onlineMode ? [...onlineSetupTraps] : []
   resize()
   randomizeArena()
   running = true
@@ -793,14 +866,9 @@ function startRun() {
   delete powerPanel.dataset.shown
   message.classList.add('hidden')
   if (onlineMode) {
+    traps = preparedOnlineTraps
     onlineCountdown = 60
-    setTimeout(() => {
-      if (!running) return
-      traps.push(createOnlineTrap('wolf-laser', elapsedTime))
-      traps.push(createOnlineTrap('bird-net', elapsedTime + 3))
-      traps.push(createOnlineTrap('axe', elapsedTime + 6))
-      traps.push(createOnlineTrap('zombie-echo', elapsedTime + 9))
-    }, 1000)
+    playBattleAudio()
   }
   requestAnimationFrame(frame)
 }
@@ -1160,6 +1228,55 @@ function drawCharacter(x, y, skin, elapsed, ghost) {
   context.restore()
 }
 
+function playBattleAudio() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext
+  if (!AudioContextClass) return
+  const audioContext = new AudioContextClass()
+  const master = audioContext.createGain()
+  master.gain.value = 0.035
+  master.connect(audioContext.destination)
+  const start = audioContext.currentTime
+  ;[110, 146.8, 164.8, 220, 164.8, 146.8].forEach((frequency, index) => {
+    const oscillator = audioContext.createOscillator()
+    const gain = audioContext.createGain()
+    const time = start + index * 0.32
+    oscillator.type = 'triangle'
+    oscillator.frequency.setValueAtTime(frequency, time)
+    gain.gain.setValueAtTime(0.0001, time)
+    gain.gain.exponentialRampToValueAtTime(0.18, time + 0.04)
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.28)
+    oscillator.connect(gain)
+    gain.connect(master)
+    oscillator.start(time)
+    oscillator.stop(time + 0.3)
+  })
+  setTimeout(() => audioContext.close(), 2400)
+}
+
+function playLossLaugh() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext
+  if (!AudioContextClass) return
+  const audioContext = new AudioContextClass()
+  const master = audioContext.createGain()
+  master.gain.value = 0.045
+  master.connect(audioContext.destination)
+  ;[180, 250, 180, 250, 160].forEach((frequency, index) => {
+    const oscillator = audioContext.createOscillator()
+    const gain = audioContext.createGain()
+    const time = audioContext.currentTime + index * 0.18
+    oscillator.type = 'square'
+    oscillator.frequency.setValueAtTime(frequency, time)
+    gain.gain.setValueAtTime(0.0001, time)
+    gain.gain.exponentialRampToValueAtTime(0.22, time + 0.03)
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.13)
+    oscillator.connect(gain)
+    gain.connect(master)
+    oscillator.start(time)
+    oscillator.stop(time + 0.15)
+  })
+  setTimeout(() => audioContext.close(), 1100)
+}
+
 function drawCircle(x, y, radius, color, ghost) {
   if (x === undefined) return
   context.globalAlpha = ghost ? 0.7 : 1
@@ -1216,6 +1333,7 @@ function showLossScreen() {
   overlay.hidden = false
   overlay.classList.add('is-visible')
   playLossAudio()
+  playLossLaugh()
 
   setTimeout(() => {
     window.location.reload()
@@ -1260,9 +1378,15 @@ function showPowerChoice() {
 
 function bindCanvasControls() {
   if (!canvas || canvas.dataset.controlsBound === 'true') return
-  canvas.addEventListener('pointermove', pointerMove)
-  canvas.addEventListener('pointerdown', pointerMove)
-  canvas.addEventListener('touchmove', pointerMove, { passive: true })
+  canvas.addEventListener('pointermove', (event) => {
+    if (!onlineSetupActive) pointerMove(event)
+  })
+  canvas.addEventListener('pointerdown', (event) => {
+    if (!placeOnlineTrap(event)) pointerMove(event)
+  })
+  canvas.addEventListener('touchmove', (event) => {
+    if (!onlineSetupActive) pointerMove(event)
+  }, { passive: true })
   canvas.dataset.controlsBound = 'true'
 }
 
