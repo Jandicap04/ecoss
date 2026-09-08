@@ -116,6 +116,9 @@ let remoteSetupReady = false
 let onlinePlayerAlive = true
 let onlineOpponentAlive = true
 let onlineMatchEnded = false
+let onlineSpectator = false
+let spectatorEchoActive = false
+let remoteControlledEcho = null
 const onlineChannel = 'BroadcastChannel' in window ? new BroadcastChannel('echo-loop-live-arena') : null
 const presenceKeyPrefix = 'echo-loop-online-player-'
 
@@ -134,6 +137,15 @@ if (onlineChannel) {
     if (!state || state.id === localPlayerId) return
     if (state.type === 'player-presence') {
       handleOnlinePresence(state)
+      return
+    }
+    if (state.type === 'player-defeated') {
+      onlineOpponentAlive = false
+      if (running && onlinePlayerAlive) updatePeerRoomDisplay('RIVAL ELIMINADO · CONTINUA')
+      return
+    }
+    if (state.type === 'spectator-echo') {
+      remoteControlledEcho = { x: state.x, y: state.y, name: state.name || 'ECO DEL ELIMINADO', lastSeen: performance.now() }
       return
     }
     if (state.type !== 'player-state') return
@@ -172,7 +184,7 @@ function updatePeerRoomDisplay(message = 'ESPERANDO CONEXIÓN P2P') {
 }
 
 function sendMatchResult(result) {
-  const message = { type: 'match-result', result, elapsed: elapsedTime }
+  const message = { type: 'player-defeated', result, elapsed: elapsedTime, id: localPlayerId }
   if (peerConnection?.open) peerConnection.send(message)
   if (onlineChannel) onlineChannel.postMessage({ ...message, id: localPlayerId })
 }
@@ -260,9 +272,38 @@ function beginOnlineMatch() {
   if (setupPanel) setupPanel.hidden = true
   onlineMode = true
   onlineMatchActive = true
+  onlineSpectator = false
+  spectatorEchoActive = false
   onlineCountdown = 60
   updatePeerRoomDisplay('PERSEGUIR AL RIVAL')
   startRun()
+}
+
+function sendSpectatorEcho(x, y) {
+  const message = { type: 'spectator-echo', x, y, name: localStorage.getItem('echo-loop-player-name') || 'ECO DEL ELIMINADO', id: localPlayerId }
+  if (peerConnection?.open) peerConnection.send(message)
+  if (onlineChannel) onlineChannel.postMessage(message)
+}
+
+function activateSpectatorEcho() {
+  if (!onlineSpectator) return
+  spectatorEchoActive = true
+  const button = document.querySelector('#spectator-echo-button')
+  if (button) {
+    button.textContent = 'MOVER ECO EN EL MAPA'
+    button.disabled = true
+  }
+  updatePeerRoomDisplay('ECO ACTIVO · TOCA EL MAPA PARA PERSEGUIR')
+}
+
+function moveSpectatorEcho(event) {
+  if (!onlineSpectator || !spectatorEchoActive || !canvas) return false
+  const bounds = canvas.getBoundingClientRect()
+  const point = event.touches ? event.touches[0] : event
+  const x = Math.max(arena.left + 16, Math.min(arena.right - 16, point.clientX - bounds.left))
+  const y = Math.max(arena.top + 16, Math.min(arena.bottom - 16, point.clientY - bounds.top))
+  sendSpectatorEcho(x, y)
+  return true
 }
 
 function attachPeerConnection(connection, name) {
@@ -279,6 +320,15 @@ function attachPeerConnection(connection, name) {
       if (Array.isArray(message.traps)) remoteTraps = message.traps
       updateSetupReadyDisplay()
       if (onlineSetupReady && remoteSetupReady) beginOnlineMatch()
+      return
+    }
+    if (message?.type === 'player-defeated') {
+      onlineOpponentAlive = false
+      if (running && onlinePlayerAlive) updatePeerRoomDisplay('RIVAL ELIMINADO · CONTINUA')
+      return
+    }
+    if (message?.type === 'spectator-echo') {
+      remoteControlledEcho = { x: message.x, y: message.y, name: message.name || 'ECO DEL ELIMINADO', lastSeen: performance.now() }
       return
     }
     if (!message || message.type !== 'player-state') return
@@ -1094,11 +1144,14 @@ function update(elapsed, delta) {
 
   function detectOnlineCombat(elapsed) {
     if (!onlineMode || !opponent || !onlinePlayerAlive || onlineMatchEnded) return
+      if (remoteControlledEcho && performance.now() - remoteControlledEcho.lastSeen < 3000 && Math.hypot(player.x - remoteControlledEcho.x, player.y - remoteControlledEcho.y) < playerRadius * 2) {
+        endRun(elapsed, 'EL ECO DEL ELIMINADO TE ENCONTRO.')
+        return
+      }
     if (Math.hypot(player.x - opponent.x, player.y - opponent.y) < playerRadius * 2.3) {
       const attackerWins = elapsed >= Number(opponent.elapsed || 0)
       if (attackerWins) {
         sendMatchResult('defeated')
-        onlinePlayerAlive = false
         endRun(elapsed, 'EL RIVAL TE DERRIBO.')
       } else {
         sendMatchResult('defeated')
@@ -1264,6 +1317,13 @@ function draw(elapsed) {
     if (onlineMode && echo.skin === 'zombie') drawCharacter(echo.x, echo.y, skins.find((skin) => skin.character === 'zombie') || skins[5], elapsed, true)
     else drawCircle(echo.x, echo.y, 9, echo.color, true)
   })
+  if (onlineMode && remoteControlledEcho && performance.now() - remoteControlledEcho.lastSeen < 3000) {
+    drawTrapCharacter(remoteControlledEcho.x, remoteControlledEcho.y, 'zombie', elapsed, 0.9)
+    context.fillStyle = '#b8ff5b'
+    context.font = '9px DM Mono, monospace'
+    context.textAlign = 'center'
+    context.fillText('ECO CONTROLADO', remoteControlledEcho.x, remoteControlledEcho.y - 25)
+  }
   particles.forEach((particle) => drawCircle(particle.x, particle.y, 2, particle.color, false))
   if (onlineMode && opponent && performance.now() - opponent.lastSeen < 3000) {
     drawCharacter(opponent.x, opponent.y, skins.find((skin) => skin.id === opponent.skin) || skins[0], elapsed, true)
@@ -1485,11 +1545,32 @@ function showWinScreen() {
   playLossLaugh()
 }
 
+function showSpectatorScreen(reason) {
+  onlineSpectator = true
+  spectatorEchoActive = false
+  running = false
+  message.querySelector('.eyebrow').textContent = 'MODO ESPECTADOR'
+  message.querySelector('h1').innerHTML = 'TE ELIMINARON<br><em>CONTROLA UN ECO.</em>'
+  message.querySelector('p').textContent = `${reason} El rival sigue vivo. Puedes añadir un eco controlable.`
+  startButton.hidden = true
+  if (!document.querySelector('#spectator-echo-button')) {
+    const spectatorButton = document.createElement('button')
+    spectatorButton.className = 'primary-button'
+    spectatorButton.id = 'spectator-echo-button'
+    spectatorButton.innerHTML = '<span>AÑADIR ECO</span><span>+</span>'
+    spectatorButton.addEventListener('click', activateSpectatorEcho)
+    message.append(spectatorButton)
+  }
+  message.classList.remove('hidden')
+}
+
 function endRun(elapsed, reason = 'Tu pasado te encontró.') {
+  if (onlineMode && !onlinePlayerAlive) return
   if (onlineMode && !onlineMatchEnded) {
-    onlineMatchEnded = true
     onlinePlayerAlive = false
     sendMatchResult('defeated')
+    showSpectatorScreen(reason)
+    return
   }
   running = false
   const earned = Math.floor(elapsed * (elapsed > 20 ? 2 : 1))
@@ -1529,13 +1610,16 @@ function showPowerChoice() {
 function bindCanvasControls() {
   if (!canvas || canvas.dataset.controlsBound === 'true') return
   canvas.addEventListener('pointermove', (event) => {
-    if (!onlineSetupActive) pointerMove(event)
+    if (onlineSpectator) moveSpectatorEcho(event)
+    else if (!onlineSetupActive) pointerMove(event)
   })
   canvas.addEventListener('pointerdown', (event) => {
-    if (!placeOnlineTrap(event)) pointerMove(event)
+    if (onlineSpectator) moveSpectatorEcho(event)
+    else if (!placeOnlineTrap(event)) pointerMove(event)
   })
   canvas.addEventListener('touchmove', (event) => {
-    if (!onlineSetupActive) pointerMove(event)
+    if (onlineSpectator) moveSpectatorEcho(event)
+    else if (!onlineSetupActive) pointerMove(event)
   }, { passive: true })
   canvas.dataset.controlsBound = 'true'
 }
