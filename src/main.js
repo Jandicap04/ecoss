@@ -1628,7 +1628,13 @@ function drawPlayer(elapsed) {
 }
 
 function drawTrapCharacter(x, y, character, elapsed, opacity = 1) {
-  const skin = skins.find((item) => item.character === character) || skins[0]
+  const trapSkinIds = {
+    bird: 'candy',
+    wolf: 'laser',
+    axe: 'glitch',
+    zombie: 'void',
+  }
+  const skin = skins.find((item) => item.id === trapSkinIds[character]) || skins[0]
   drawCharacter(x, y, skin, elapsed, opacity < 1)
   context.save()
   context.globalAlpha = opacity
