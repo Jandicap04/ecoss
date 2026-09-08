@@ -13,7 +13,7 @@ document.querySelector('#app').innerHTML = `
     <section class="lobby-panel" aria-label="Lobby competitivo">
       <div class="lobby-copy">
         <span class="eyebrow">ONLINE COMPETITIVE</span>
-        <h2>FÚTBOL EN VIVO</h2>
+        <h2>GUERRA EN VIVO</h2>
       </div>
       <div class="lobby-actions">
         <button class="primary-button" id="play-online-button" type="button"><span>LISTO PARA COMBATIR</span><span>→</span></button>
