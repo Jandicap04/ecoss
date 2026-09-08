@@ -228,6 +228,11 @@ function showOnlineTrapSetup() {
   onlineSetupReady = false
   remoteSetupReady = false
   onlineSetupTraps = []
+  remoteControlledEcho = null
+  spectatorEchoActive = false
+  document.querySelector('#spectator-echo-button')?.remove()
+  if (message) message.classList.add('hidden')
+  if (powerPanel) powerPanel.hidden = true
   const setupPanel = document.querySelector('#online-setup')
   if (setupPanel) setupPanel.hidden = false
   updatePeerRoomDisplay('ELIGE Y COLOCA TUS TRAMPAS')
@@ -1311,7 +1316,7 @@ function update(elapsed, delta) {
 
   function detectOnlineCombat(elapsed) {
     if (!onlineMode || !opponent || !onlinePlayerAlive || onlineMatchEnded) return
-      if (remoteControlledEcho && performance.now() - remoteControlledEcho.lastSeen < 3000 && Math.hypot(player.x - remoteControlledEcho.x, player.y - remoteControlledEcho.y) < playerRadius * 2) {
+      if (remoteControlledEcho && performance.now() - remoteControlledEcho.lastSeen < 10000 && Math.hypot(player.x - remoteControlledEcho.x, player.y - remoteControlledEcho.y) < playerRadius * 2) {
         endRun(elapsed, 'EL ECO DEL ELIMINADO TE ENCONTRO.')
         return
       }
