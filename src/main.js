@@ -67,7 +67,7 @@ function render() {
   document.querySelector('#app').innerHTML = `
     <div class="app-shell">
       <aside class="sidebar" id="sidebar">
-        <div class="brand"><span class="brand-mark">CR</span><span class="brand-word">Cotiza<span>Rápido</span></span></div>
+        <div class="brand"><span class="brand-logo-frame"><img src="/IMAGENES.png" alt="Pacotizar" /></span><span class="brand-word">PAC<span>OTIZAR</span></span></div>
         <div class="workspace-switcher"><span class="avatar avatar-small">${escapeHtml(state.profile.initials)}</span><span><b>${escapeHtml(state.profile.workshop)}</b><small>Operación activa</small></span><span class="chevron">⌄</span></div>
         <nav class="main-nav" aria-label="Navegación principal">
           <p class="nav-caption">OPERACIÓN</p>
