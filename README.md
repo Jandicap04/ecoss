@@ -19,6 +19,30 @@ Para comprobar la compilación de producción:
 npm run build
 ```
 
+## Versión híbrida para celular
+
+PACOTIZAR funciona como una PWA instalable. Usa la misma aplicación web en computador y celular, pero en el teléfono puede abrirse como una app independiente y conservar el shell básico en caché.
+
+Archivos responsables:
+
+- `public/manifest.webmanifest`: nombre, icono, colores y modo de instalación.
+- `public/sw.js`: caché offline básica del shell de la aplicación.
+- `index.html`: metadatos de instalación para Android y iPhone.
+
+### Instalar en Android
+
+1. Abre PACOTIZAR desde Chrome usando HTTPS.
+2. Abre el menú del navegador.
+3. Pulsa **Instalar aplicación** o **Añadir a pantalla de inicio**.
+
+### Instalar en iPhone
+
+1. Abre PACOTIZAR desde Safari usando HTTPS.
+2. Pulsa **Compartir**.
+3. Selecciona **Añadir a pantalla de inicio**.
+
+Para publicar una aplicación nativa en Google Play o App Store, el siguiente paso sería envolver esta PWA con Capacitor y generar los proyectos Android/iOS.
+
 ## Qué incluye el MVP
 
 ### Dashboard

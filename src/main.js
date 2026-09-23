@@ -1,5 +1,9 @@
 import './style.css'
 
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'))
+}
+
 const STORAGE_KEY = 'cotizarapido-mvp'
 const money = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 const dateFormat = new Intl.DateTimeFormat('es-CO', { day: '2-digit', month: 'short' })

@@ -1,0 +1,20 @@
+{
+  "name": "PACOTIZAR · Operación del taller",
+  "short_name": "PACOTIZAR",
+  "description": "Cotizaciones y operación para talleres mecánicos.",
+  "lang": "es-CO",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f8f7f3",
+  "theme_color": "#f4efe7",
+  "icons": [
+    {
+      "src": "/IMAGENES.png",
+      "sizes": "831x768",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
