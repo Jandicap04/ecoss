@@ -107,14 +107,27 @@ La lógica temporal del MVP está en [src/main.js](src/main.js):
 
 Cuando conectemos Supabase, esta lógica se separará en servicios de datos, pero esos son los puntos actuales que controlan la experiencia.
 
+## Roles y permisos
+
+- **Dueño del local**: administra su taller y tiene control total de clientes, servicios, vehículos y cotizaciones.
+- **Administrador del taller**: puede modificar y eliminar clientes, vehículos, servicios y cotizaciones de su taller.
+- **Asesor**: consulta clientes y servicios, y puede crear o actualizar cotizaciones según el flujo operativo.
+- **Administrador principal**: controla la plataforma completa, talleres, feed, Gmail y reportes globales.
+
+Estos permisos se aplican en Supabase mediante `is_workshop_manager()` y las políticas RLS de [supabase/schema.sql](supabase/schema.sql).
+
+## Feed de cotizaciones
+
+El dashboard muestra las cotizaciones más recientes en un feed anonimizado. No se publica el nombre, teléfono ni datos privados del cliente. El diálogo **¿Puedes ser tú el siguiente?** invita a crear la primera cotización para participar.
+
 ## Persistencia de datos
 
 Este prototipo usa `localStorage` del navegador con la clave `cotizarapido-mvp`.
 
 - Los cambios permanecen al recargar la página.
 - Los datos no se comparten entre navegadores o dispositivos.
-- La interfaz todavía usa `localStorage`; el SQL ya está preparado para la migración a Supabase.
-- No hay todavía usuarios reales ni sincronización con Supabase.
+- La interfaz inicia sin datos demo y usa `localStorage` únicamente como estado temporal mientras conectamos Supabase.
+- El SQL está preparado para usuarios reales, permisos, feed y sincronización con Supabase.
 - **Restablecer demo** elimina los cambios locales y vuelve a los datos iniciales.
 
 ## Arquitectura actual
@@ -134,6 +147,8 @@ El proyecto conserva el stack ligero de Vite y JavaScript vanilla definido para 
 - Supabase Auth para registro e inicio de sesión.
 - Conectar las lecturas y escrituras del frontend con Supabase.
 - Crear automáticamente el taller y su primer miembro después del registro.
+- Migrar el feed local a `community_feed_posts`.
+- Implementar edición y eliminación con confirmación y auditoría en la interfaz.
 - Servicio de WhatsApp para enviar cotizaciones.
 - Generación de PDF.
 - Validación y manejo de errores en API.

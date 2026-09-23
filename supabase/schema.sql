@@ -133,6 +133,18 @@ create table public.quote_items (
   total numeric(12,2) generated always as (quantity * unit_price) stored
 );
 
+-- Publicaciones anonimizadas para el feed: nunca guardan el nombre del cliente.
+create table public.community_feed_posts (
+  id uuid primary key default gen_random_uuid(),
+  workshop_id uuid not null references public.workshops(id) on delete cascade,
+  quote_id uuid unique references public.quotes(id) on delete cascade,
+  vehicle_label text not null,
+  quote_status public.quote_status not null,
+  total numeric(12,2) not null default 0 check (total >= 0),
+  visible boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
 -- Campanas/espacios publicitarios aprobados para monetizar la plataforma.
 create table public.ad_campaigns (
   id uuid primary key default gen_random_uuid(),
@@ -164,6 +176,7 @@ create index services_workshop_active_idx on public.services(workshop_id, active
 create index quotes_workshop_status_idx on public.quotes(workshop_id, status);
 create index quotes_created_at_idx on public.quotes(created_at desc);
 create index quote_items_quote_idx on public.quote_items(quote_id);
+create index community_feed_visible_idx on public.community_feed_posts(visible, created_at desc);
 create index ad_events_campaign_idx on public.ad_events(campaign_id, created_at desc);
 create index ad_events_workshop_idx on public.ad_events(workshop_id, created_at desc);
 create index gmail_connections_admin_idx on public.gmail_connections(platform_admin_id);
@@ -176,10 +189,29 @@ security definer
 set search_path = public
 as $$
   select exists (
-    select 1
-    from public.workshop_members
+    select 1 from public.workshops
+    where id = target_workshop_id and owner_id = auth.uid()
+    union all
+    select 1 from public.workshop_members
+    where workshop_id = target_workshop_id and profile_id = auth.uid()
+  );
+$$;
+
+create or replace function public.is_workshop_manager(target_workshop_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.workshops
+    where id = target_workshop_id and owner_id = auth.uid()
+    union all
+    select 1 from public.workshop_members
     where workshop_id = target_workshop_id
       and profile_id = auth.uid()
+      and role in ('owner', 'admin')
   );
 $$;
 
@@ -226,6 +258,7 @@ alter table public.vehicles enable row level security;
 alter table public.services enable row level security;
 alter table public.quotes enable row level security;
 alter table public.quote_items enable row level security;
+alter table public.community_feed_posts enable row level security;
 alter table public.ad_campaigns enable row level security;
 alter table public.ad_events enable row level security;
 
@@ -269,38 +302,90 @@ on public.workshop_members for all
 using (exists (select 1 from public.workshops where id = workshop_id and owner_id = auth.uid()))
 with check (exists (select 1 from public.workshops where id = workshop_id and owner_id = auth.uid()));
 
-create policy "Members manage customers"
-on public.customers for all
-using (public.is_workshop_member(workshop_id))
-with check (public.is_workshop_member(workshop_id));
+drop policy if exists "Members manage customers" on public.customers;
+create policy "Members view customers"
+on public.customers for select
+using (public.is_workshop_member(workshop_id));
+create policy "Managers manage customers"
+on public.customers for insert
+with check (public.is_workshop_manager(workshop_id));
+create policy "Managers update customers"
+on public.customers for update
+using (public.is_workshop_manager(workshop_id))
+with check (public.is_workshop_manager(workshop_id));
+create policy "Managers delete customers"
+on public.customers for delete
+using (public.is_workshop_manager(workshop_id));
 
 create policy "Platform admins can view customers"
 on public.customers for select
 using (public.is_platform_admin());
 
-create policy "Members manage vehicles"
+drop policy if exists "Members manage vehicles" on public.vehicles;
+create policy "Members view vehicles"
+on public.vehicles for select
+using (exists (select 1 from public.customers c where c.id = customer_id and public.is_workshop_member(c.workshop_id)));
+create policy "Managers manage vehicles"
 on public.vehicles for all
-using (exists (select 1 from public.customers c where c.id = customer_id and public.is_workshop_member(c.workshop_id)))
-with check (exists (select 1 from public.customers c where c.id = customer_id and public.is_workshop_member(c.workshop_id)));
+using (exists (select 1 from public.customers c where c.id = customer_id and public.is_workshop_manager(c.workshop_id)))
+with check (exists (select 1 from public.customers c where c.id = customer_id and public.is_workshop_manager(c.workshop_id)));
 
-create policy "Members manage services"
+drop policy if exists "Members manage services" on public.services;
+create policy "Members view services"
+on public.services for select
+using (public.is_workshop_member(workshop_id));
+create policy "Managers manage services"
 on public.services for all
-using (public.is_workshop_member(workshop_id))
-with check (public.is_workshop_member(workshop_id));
+using (public.is_workshop_manager(workshop_id))
+with check (public.is_workshop_manager(workshop_id));
 
-create policy "Members manage quotes"
-on public.quotes for all
+create policy "Members create quotes"
+on public.quotes for insert
+with check (public.is_workshop_member(workshop_id));
+create policy "Members update quotes"
+on public.quotes for update
 using (public.is_workshop_member(workshop_id))
 with check (public.is_workshop_member(workshop_id));
+create policy "Managers delete quotes"
+on public.quotes for delete
+using (public.is_workshop_manager(workshop_id));
 
 create policy "Platform admins can view quotes"
 on public.quotes for select
 using (public.is_platform_admin());
 
-create policy "Members manage quote items"
-on public.quote_items for all
+create policy "Members view quote items"
+on public.quote_items for select
+using (exists (select 1 from public.quotes q where q.id = quote_id and public.is_workshop_member(q.workshop_id)));
+create policy "Members create quote items"
+on public.quote_items for insert
+with check (exists (select 1 from public.quotes q where q.id = quote_id and public.is_workshop_member(q.workshop_id)));
+create policy "Members update quote items"
+on public.quote_items for update
 using (exists (select 1 from public.quotes q where q.id = quote_id and public.is_workshop_member(q.workshop_id)))
 with check (exists (select 1 from public.quotes q where q.id = quote_id and public.is_workshop_member(q.workshop_id)));
+create policy "Managers delete quote items"
+on public.quote_items for delete
+using (exists (select 1 from public.quotes q where q.id = quote_id and public.is_workshop_manager(q.workshop_id)));
+
+create policy "Authenticated users view visible feed"
+on public.community_feed_posts for select
+to authenticated
+using (visible = true or public.is_workshop_member(workshop_id));
+
+create policy "Members create feed posts"
+on public.community_feed_posts for insert
+to authenticated
+with check (public.is_workshop_member(workshop_id));
+
+create policy "Managers manage feed posts"
+on public.community_feed_posts for update
+using (public.is_workshop_manager(workshop_id))
+with check (public.is_workshop_manager(workshop_id));
+
+create policy "Managers delete feed posts"
+on public.community_feed_posts for delete
+using (public.is_workshop_manager(workshop_id));
 
 create policy "Authenticated users view active ads"
 on public.ad_campaigns for select
