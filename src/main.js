@@ -84,7 +84,7 @@ function renderView() {
   if (activeView === 'customers') return renderCustomers()
   if (activeView === 'services') return renderServices()
   if (activeView === 'settings') return renderSettings()
-  if (activeView === 'admin') return state.quotes.length || state.customers.length ? renderAdmin() : renderEmptyAdmin()
+  if (activeView === 'admin') return renderEmptyAdmin()
   return renderDashboard()
 }
 
