@@ -4,9 +4,26 @@
 
 create extension if not exists pgcrypto;
 
-create type public.member_role as enum ('owner', 'admin', 'advisor');
-create type public.quote_status as enum ('draft', 'sent', 'viewed', 'approved', 'rejected', 'expired');
-create type public.ad_event_type as enum ('impression', 'click', 'conversion');
+do $$
+begin
+  create type public.member_role as enum ('owner', 'admin', 'advisor');
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  create type public.quote_status as enum ('draft', 'sent', 'viewed', 'approved', 'rejected', 'expired');
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  create type public.ad_event_type as enum ('impression', 'click', 'conversion');
+exception
+  when duplicate_object then null;
+end $$;
 
 create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
