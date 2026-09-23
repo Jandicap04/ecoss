@@ -1,4 +1,4 @@
-# CotizaRápido
+# PACOTIZAR
 
 MVP de un Micro-SaaS para talleres mecánicos. Permite crear cotizaciones profesionales, consultar clientes, administrar servicios y visualizar el estado comercial del taller.
 
