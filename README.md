@@ -27,16 +27,17 @@ npm run build
 - Gráfico de actividad semanal.
 - Estado visual de conversión.
 - Checklist de configuración del taller.
-- Banner de prueba gratuita de 7 días.
+- Indicadores de operación y actividad del taller.
 
 ### Cotizaciones
 
 1. Pulsa **Crear cotización** o entra en **Cotizaciones**.
 2. Completa el cliente y el vehículo.
-3. Selecciona servicios del catálogo.
-4. Ajusta los precios si es necesario.
-5. Guarda la cotización.
-6. Abre una cotización para ver su detalle, duplicarla o simular el envío por WhatsApp.
+3. Registra el presupuesto mínimo y máximo que puede pagar el cliente.
+4. Añade notas sobre prioridades o ajustes posibles.
+5. Selecciona servicios del catálogo y ajusta los precios.
+6. Guarda la cotización.
+7. Abre una cotización para ver su detalle, duplicarla o simular el envío por WhatsApp.
 
 La cotización queda guardada como borrador en el demo. El total se calcula automáticamente a partir de las líneas de servicio.
 
@@ -48,21 +49,39 @@ Desde **Clientes** puedes buscar clientes, consultar teléfono, vehículo, visit
 
 Desde **Servicios** puedes consultar el catálogo de precios que aparece en el formulario de cotización.
 
-### Ajustes y suscripción
+### Ajustes y monetización
 
-Desde **Ajustes** puedes editar los datos del taller, ver el estado de la prueba gratuita, abrir la comparación de planes, simular la activación del plan Profesional y restablecer los datos iniciales.
+Desde **Ajustes** puedes editar los datos del taller, consultar la sección de ingresos por anuncios, preparar la futura configuración de campañas publicitarias y restablecer los datos iniciales.
 
-## Navegación rápida
+### Admin principal
 
-| Vista | Uso |
-| --- | --- |
-| Resumen | Métricas y actividad del taller |
-| Cotizaciones | Crear y revisar propuestas |
-| Clientes | Consultar y agregar clientes |
-| Servicios | Revisar precios disponibles |
-| Ajustes | Editar el perfil y el plan |
+La vista **Admin principal** es una consola separada para el administrador global de la plataforma. Muestra talleres registrados, cotizaciones globales, ingresos por anuncios y el estado de la plataforma. También incluye el punto de entrada para conectar Gmail.
 
-En móvil, el menú lateral se abre con el botón de menú de la barra superior.
+La conexión real se hará con **Google OAuth desde Supabase Auth**. El navegador no debe recibir contraseñas ni refresh tokens. La cuenta, permisos y estado quedan registrados en `platform_admins` y `gmail_connections`, mientras el intercambio de tokens debe vivir en una Edge Function o Supabase Vault.
+
+## Base de datos Supabase
+
+El esquema inicial está en [supabase/schema.sql](supabase/schema.sql). Se ejecuta completo desde **Supabase Dashboard → SQL Editor → New query**.
+
+Incluye:
+
+- Perfiles, talleres y miembros del taller.
+- Clientes, vehículos, servicios y cotizaciones.
+- Presupuesto mínimo, máximo y notas sugeridas por el cliente.
+- Líneas de cotización con subtotal calculado.
+- Campañas, impresiones, clics y conversiones de anuncios.
+- Políticas RLS para aislar los datos de cada taller.
+- Administradores globales y conexiones Gmail OAuth.
+
+## Dónde está la lógica de cotización
+
+La lógica temporal del MVP está en [src/main.js](src/main.js):
+
+- `renderModal()` construye el formulario y muestra presupuesto mínimo, máximo y notas.
+- `submitQuote()` valida el rango de presupuesto, calcula el total y guarda la cotización.
+- `renderSettings()` muestra la sección de monetización por anuncios.
+
+Cuando conectemos Supabase, esta lógica se separará en servicios de datos, pero esos son los puntos actuales que controlan la experiencia.
 
 ## Persistencia de datos
 
@@ -70,43 +89,46 @@ Este prototipo usa `localStorage` del navegador con la clave `cotizarapido-mvp`.
 
 - Los cambios permanecen al recargar la página.
 - Los datos no se comparten entre navegadores o dispositivos.
-- No hay todavía usuarios reales ni sincronización con un servidor.
+- La interfaz todavía usa `localStorage`; el SQL ya está preparado para la migración a Supabase.
+- No hay todavía usuarios reales ni sincronización con Supabase.
 - **Restablecer demo** elimina los cambios locales y vuelve a los datos iniciales.
 
 ## Arquitectura actual
 
 ```text
-index.html       Entrada HTML y metadatos
-src/main.js      Estado, navegación, vistas y lógica de negocio del demo
-src/style.css    Sistema visual responsive
-public/          Archivos públicos estáticos
+index.html          Entrada HTML y metadatos
+src/main.js         Estado, navegación, vistas y lógica de negocio del demo
+src/style.css       Sistema visual responsive
+supabase/schema.sql Esquema PostgreSQL, RLS y monetización por anuncios
+public/             Archivos públicos estáticos
 ```
 
-El proyecto conserva el stack ligero de Vite y JavaScript vanilla definido para este workspace. No se añadió Next.js todavía porque esta entrega está enfocada en validar la experiencia antes de conectar infraestructura externa.
+El proyecto conserva el stack ligero de Vite y JavaScript vanilla definido para este workspace.
 
 ## Qué falta para producción
 
 - Supabase Auth para registro e inicio de sesión.
-- PostgreSQL/Supabase para talleres, clientes, servicios y cotizaciones.
-- Row Level Security para separar los datos de cada taller.
-- Stripe para suscripciones y prueba gratuita real.
-- Webhooks para renovaciones y cancelaciones.
+- Conectar las lecturas y escrituras del frontend con Supabase.
+- Crear automáticamente el taller y su primer miembro después del registro.
 - Servicio de WhatsApp para enviar cotizaciones.
 - Generación de PDF.
 - Validación y manejo de errores en API.
 - Sentry u otra herramienta de observabilidad.
+- Integrar un proveedor o red publicitaria real y validar sus pagos.
+- Configurar Google Provider en Supabase Auth y la Edge Function de Gmail.
 
 ## Flujo recomendado para probarlo
 
 1. Abre el dashboard y revisa las métricas.
 2. Entra en **Cotizaciones** y crea una nueva.
-3. Selecciona un servicio para comprobar el cálculo automático.
-4. Guarda la cotización y abre su detalle.
-5. Agrega un cliente desde **Clientes**.
-6. Cambia el nombre del taller desde **Ajustes**.
-7. Activa el plan Profesional en modo demo.
-8. Recarga la página para comprobar que los cambios persisten.
-9. Usa **Restablecer demo** para volver al estado inicial.
+3. Registra un presupuesto mínimo y máximo.
+4. Selecciona un servicio para comprobar el cálculo automático.
+5. Guarda la cotización y abre su detalle.
+6. Revisa que aparezcan el rango y las notas del presupuesto.
+7. Agrega un cliente desde **Clientes**.
+8. Cambia el nombre del taller desde **Ajustes**.
+9. Recarga la página para comprobar que los cambios persisten.
+10. Usa **Restablecer demo** para volver al estado inicial.
 
 ## Validación
 
@@ -115,5 +137,3 @@ El proyecto se valida con:
 ```bash
 npm run build
 ```
-
-La compilación actual se completa correctamente con Vite.
