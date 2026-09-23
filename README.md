@@ -87,6 +87,10 @@ La conexión real se hará con **Google OAuth desde Supabase Auth**. El navegado
 
 El esquema inicial está en [supabase/schema.sql](supabase/schema.sql). Se ejecuta completo desde **Supabase Dashboard → SQL Editor → New query**.
 
+La configuración del proyecto está en `.env.local` y el cliente de navegador en [src/lib/supabase.js](src/lib/supabase.js). Como este proyecto usa Vite, las variables usan el prefijo `VITE_`; las variables `NEXT_PUBLIC_` de una guía Next.js no se leen automáticamente aquí.
+
+El cliente Supabase persiste la sesión, refresca el token automáticamente y detecta retornos OAuth. No se usa middleware de Next porque este repositorio no tiene Next.js ni rutas server-side.
+
 Incluye:
 
 - Perfiles, talleres y miembros del taller.

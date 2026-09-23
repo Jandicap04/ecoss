@@ -1,7 +1,12 @@
 import './style.css'
+import { supabase } from './lib/supabase'
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'))
+}
+
+if (supabase) {
+  supabase.auth.onAuthStateChange(() => {})
 }
 
 const STORAGE_KEY = 'pacotizar-workspace-v2'
