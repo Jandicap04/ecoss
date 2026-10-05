@@ -1,4 +1,4 @@
-import { escapeHtml, formatMoney, icons, initials } from '../utils/ui.js'
+import { escapeHtml, icons, initials } from '../utils/ui.js'
 
 function normalizeProvider(item) {
   if (!item || typeof item !== 'object') return null
@@ -17,8 +17,20 @@ function normalizeProvider(item) {
   }
 }
 
+export function filterProviders(providers, query = '', category = '') {
+  const searchTerm = String(query || '').trim().toLowerCase()
+  const categoryTerm = String(category || '').trim().toLowerCase()
+
+  return (Array.isArray(providers) ? providers : []).map(normalizeProvider).filter(Boolean).filter((provider) => {
+    const haystack = `${provider.name || ''} ${provider.city || ''} ${provider.category || ''}`.toLowerCase()
+    const matchesQuery = !searchTerm || haystack.includes(searchTerm)
+    const matchesCategory = !categoryTerm || String(provider.category || '').toLowerCase() === categoryTerm
+    return matchesQuery && matchesCategory
+  })
+}
+
 export function renderClientCards(clients, canManage) {
-  const providers = (Array.isArray(clients) ? clients : []).map(normalizeProvider).filter(Boolean)
+  const providers = filterProviders(clients)
   if (!providers.length) {
     return '<div class="empty-feed"><span class="empty-feed-icon">✦</span><h3>No hay proveedores visibles</h3><p>Aún no hay negocios activos para mostrar en el marketplace.</p></div>'
   }
@@ -27,5 +39,7 @@ export function renderClientCards(clients, canManage) {
 }
 
 export function renderClients({ clients, canManage }) {
-  return `<section class="page-heading"><div><p class="eyebrow">MERCADO / PROVEEDORES</p><h1>Proveedores</h1><p class="heading-subtitle">Descubre negocios activos y encuentra a la persona ideal para cada necesidad.</p></div>${canManage ? `<button class="secondary-button" data-action="new-customer">${icons.plus}<span>Agregar proveedor</span></button>` : ''}</section><div class="toolbar"><div class="search-box">${icons.search}<input id="customer-search" placeholder="Buscar por nombre o ciudad" /></div><button class="select-button">Más relevantes <span>⌄</span></button></div><section class="surface customer-grid">${renderClientCards(clients, canManage)}</section>`
+  const categories = [...new Set((Array.isArray(clients) ? clients : []).map((provider) => provider?.category || '').filter(Boolean).map((value) => String(value).trim()))].sort((a, b) => a.localeCompare(b, 'es'))
+
+  return `<section class="page-heading"><div><p class="eyebrow">MERCADO / PROVEEDORES</p><h1>Proveedores</h1><p class="heading-subtitle">Descubre negocios activos y encuentra a la persona ideal para cada necesidad.</p></div>${canManage ? `<button class="secondary-button" data-action="new-customer">${icons.plus}<span>Agregar proveedor</span></button>` : ''}</section><div class="toolbar"><div class="search-box">${icons.search}<input id="customer-search" placeholder="Buscar por nombre o ciudad" /></div><label class="market-category-filter"><span>Categoría</span><select id="customer-category"><option value="">Todas</option>${categories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('')}</select></label></div><section class="surface customer-grid">${renderClientCards(clients, canManage)}</section>`
 }

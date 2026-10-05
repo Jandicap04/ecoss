@@ -4,7 +4,7 @@ import * as marketplaceService from '../services/marketplaceService.js'
 import { renderModal } from '../components/ModalGeneral.js'
 import { renderDashboard } from '../views/Dashboard.js'
 import { renderQuotes, renderQuoteRows } from '../views/Cotizaciones.js'
-import { renderClients, renderClientCards } from '../views/Clientes.js'
+import { renderClients, renderClientCards, filterProviders } from '../views/Clientes.js'
 import { renderServices } from '../views/Servicios.js'
 import { renderSettings } from '../views/Ajustes.js'
 import { renderAdminPrincipal } from '../views/AdminPrincipal.js'
@@ -36,13 +36,13 @@ function navItem(view, icon, label, count, active) {
   return `<button class="nav-item ${active === view ? 'active' : ''}" data-view="${view}">${icon}<span>${label}</span>${count ? `<em>${count}</em>` : ''}</button>`
 }
 
-function renderShell(state, route, viewMarkup, modalMarkup, toast, accountMenuOpen) {
+function renderShell(state, route, viewMarkup, modalMarkup, toast, accountMenuOpen, sidebarOpen = false) {
   const profile = state.profile
   const displayName = profile.name || (state.role === 'administrator' ? 'Administrador principal' : 'Usuario del marketplace')
   const initials = profile.initials || displayName.trim().split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase()
   const allowSettings = canManageWorkshop(state.role)
   const nav = `${navItem('dashboard', icons.grid, 'Resumen', 0, route)}${navItem('requests', icons.file, 'Solicitudes', state.quoteRequests.length, route)}${navItem('quotes', icons.file, 'Cotizaciones', state.quotes.length, route)}${navItem('customers', icons.users, 'Proveedores', 0, route)}${navItem('services', icons.box, 'Servicios', 0, route)}${allowSettings ? `<p class="nav-caption nav-caption-spaced">CONFIGURACIÓN</p>${navItem('settings', icons.gear, 'Ajustes', 0, route)}` : ''}${state.role === 'administrator' ? `<p class="nav-caption nav-caption-spaced">PLATAFORMA</p>${navItem('admin', icons.gear, 'Admin principal', 0, route)}` : ''}`
-  return `<div class="app-shell"><aside class="sidebar" id="sidebar"><div class="brand"><span class="brand-logo-frame"><img src="/IMAGENES.png" alt="Pacotizar" /></span><span class="brand-word">PAC<span>OTIZAR</span></span></div><div class="workspace-switcher"><span class="avatar avatar-small">${escapeHtml(initials)}</span><span><b>${escapeHtml(profile.workshop || 'Mi negocio')}</b><small>Marketplace activo</small></span><span class="chevron">⌄</span></div><nav class="main-nav" aria-label="Navegación principal"><p class="nav-caption">OPERACIÓN</p>${nav}</nav><div class="sidebar-bottom"><div class="help-card"><span class="help-icon">?</span><div><b>¿Necesitas ayuda?</b><small>Habla con soporte</small></div><span class="help-arrow">${icons.arrow}</span></div><div class="user-line"><span class="avatar">${escapeHtml(initials)}</span><span><b>${escapeHtml(displayName)}</b><small>${escapeHtml(roleName(state.role))}</small></span>${state.user ? `<button class="icon-btn account-menu-trigger" data-action="account-menu" aria-expanded="${accountMenuOpen}" aria-label="Opciones de la cuenta">•••</button>` : ''}</div>${accountMenuOpen && state.user ? `<div class="account-menu" role="menu"><div class="account-menu-heading"><b>${escapeHtml(displayName)}</b><small>${escapeHtml(roleName(state.role))}</small></div><button type="button" role="menuitem" data-action="sign-out">Cerrar sesión</button></div>` : ''}</div></aside><main class="main-content"><header class="topbar"><button class="mobile-menu icon-btn" data-action="toggle-sidebar" aria-label="Abrir menú">${icons.menu}</button><div class="breadcrumb"><span>Workspace</span><i>/</i><b>${routes[route].title}</b></div><div class="top-actions"><button class="icon-btn notification-btn" data-action="notifications" aria-label="Notificaciones">${icons.bell}<span></span></button><div class="top-avatar avatar">${escapeHtml(initials)}</div></div></header><div class="page-content">${viewMarkup}</div></main></div>${modalMarkup}<div class="toast-region" aria-live="polite">${toast ? `<div class="toast toast-${escapeHtml(toast.tone)}">${toast.tone === 'error' ? icons.alert : icons.check}<span>${escapeHtml(toast.message)}</span></div>` : ''}</div>`
+  return `<div class="app-shell"><div class="sidebar-backdrop ${sidebarOpen ? 'visible' : ''}" data-action="toggle-sidebar"></div><aside class="sidebar ${sidebarOpen ? 'open' : ''}" id="sidebar"><div class="brand"><span class="brand-logo-frame"><img src="/IMAGENES.png" alt="Pacotizar" /></span><span class="brand-word">PAC<span>OTIZAR</span></span></div><div class="workspace-switcher"><span class="avatar avatar-small">${escapeHtml(initials)}</span><span><b>${escapeHtml(profile.workshop || 'Mi negocio')}</b><small>Marketplace activo</small></span><span class="chevron">⌄</span></div><nav class="main-nav" aria-label="Navegación principal"><p class="nav-caption">OPERACIÓN</p>${nav}</nav><div class="sidebar-bottom"><div class="help-card"><span class="help-icon">?</span><div><b>¿Necesitas ayuda?</b><small>Habla con soporte</small></div><span class="help-arrow">${icons.arrow}</span></div><div class="user-line"><span class="avatar">${escapeHtml(initials)}</span><span><b>${escapeHtml(displayName)}</b><small>${escapeHtml(roleName(state.role))}</small></span>${state.user ? `<button class="icon-btn account-menu-trigger" data-action="account-menu" aria-expanded="${accountMenuOpen}" aria-label="Opciones de la cuenta">•••</button>` : ''}</div>${accountMenuOpen && state.user ? `<div class="account-menu" role="menu"><div class="account-menu-heading"><b>${escapeHtml(displayName)}</b><small>${escapeHtml(roleName(state.role))}</small></div><button type="button" role="menuitem" data-action="sign-out">Cerrar sesión</button></div>` : ''}</div></aside><main class="main-content"><header class="topbar"><button class="mobile-menu icon-btn" data-action="toggle-sidebar" aria-label="Abrir menú">${icons.menu}</button><div class="breadcrumb"><span>Workspace</span><i>/</i><b>${routes[route].title}</b></div><div class="top-actions"><button class="icon-btn notification-btn" data-action="notifications" aria-label="Notificaciones">${icons.bell}<span></span></button><div class="top-avatar avatar">${escapeHtml(initials)}</div></div></header><div class="page-content">${viewMarkup}</div></main></div>${modalMarkup}<div class="toast-region" aria-live="polite">${toast ? `<div class="toast toast-${escapeHtml(toast.tone)}">${toast.tone === 'error' ? icons.alert : icons.check}<span>${escapeHtml(toast.message)}</span></div>` : ''}</div>`
 }
 
 export function createRouter(root = document.querySelector('#app')) {
@@ -58,6 +58,7 @@ export function createRouter(root = document.querySelector('#app')) {
   let requestOfferError = ''
   let requestScope = 'market'
   let accountMenuOpen = false
+  let sidebarOpen = false
   let sessionLoaded = false
   let pendingPasswordRecovery = false
 
@@ -175,7 +176,7 @@ export function createRouter(root = document.querySelector('#app')) {
       canManage: canManageWorkshop(currentState.role),
       requestOffers,
       requestOfferError,
-    }), toast, accountMenuOpen)
+    }), toast, accountMenuOpen, sidebarOpen)
   }
 
   async function submitQuote(event) {
@@ -205,6 +206,7 @@ export function createRouter(root = document.querySelector('#app')) {
   async function handleAction(action, element) {
     const state = getState()
     if (action === 'account-menu') accountMenuOpen = !accountMenuOpen
+    else if (action === 'toggle-sidebar') sidebarOpen = !sidebarOpen
     else if (action === 'sign-out') {
       try {
         await signOut()
@@ -213,7 +215,21 @@ export function createRouter(root = document.querySelector('#app')) {
         return
       }
     } else if (action === 'new-quote') modal = { type: 'quote' }
-    else if (action === 'new-request') modal = { type: 'request' }
+    else if (action === 'new-request') {
+      const businessName = element.dataset.businessName || ''
+      const businessCity = element.dataset.businessCity || ''
+      const businessCategory = element.dataset.businessCategory || ''
+      const businessDescription = element.dataset.businessDescription || ''
+      modal = {
+        type: 'request',
+        prefill: {
+          title: businessName ? `Cotización para ${businessName}` : '',
+          description: businessDescription ? `Necesito información sobre ${businessName || 'este proveedor'} en ${businessCity || 'mi ciudad'}.\n\n${businessDescription}` : '',
+          location: businessCity || '',
+          category: businessCategory || '',
+        },
+      }
+    }
     else if (action === 'new-customer' && canManageWorkshop(state.role)) modal = { type: 'customer' }
     else if (action === 'new-service' && canManageWorkshop(state.role)) modal = { type: 'service' }
     else if (action === 'quote-detail') modal = { type: 'detail', id: element.dataset.id }
@@ -318,8 +334,9 @@ export function createRouter(root = document.querySelector('#app')) {
       modal = null
       resetState()
       notify('Demo restablecida', 'success')
-    } else if (action === 'toggle-sidebar') root.querySelector('#sidebar')?.classList.toggle('open')
-    else if (action === 'notifications') notify('No tienes notificaciones nuevas', 'info')
+    } else if (action === 'toggle-sidebar') {
+      sidebarOpen = !sidebarOpen
+    } else if (action === 'notifications') notify('No tienes notificaciones nuevas', 'info')
     else return
     await render()
   }
@@ -330,12 +347,11 @@ export function createRouter(root = document.querySelector('#app')) {
       const query = event.target.value.toLocaleLowerCase()
       root.querySelector('#all-quotes').innerHTML = renderQuoteRows(getState().quotes.filter((quote) => `${quote.customer} ${quote.vehicle}`.toLocaleLowerCase().includes(query)))
     }
-    if (event.target.id === 'customer-search') {
-      const query = event.target.value.toLocaleLowerCase()
-      const providers = (getState().featuredBusinesses.length ? getState().featuredBusinesses : getState().customers).filter((provider) => {
-        const haystack = `${provider.name || ''} ${provider.city || ''} ${provider.category || ''}`.toLocaleLowerCase()
-        return haystack.includes(query)
-      })
+    if (event.target.id === 'customer-search' || event.target.id === 'customer-category') {
+      const query = root.querySelector('#customer-search')?.value || ''
+      const category = root.querySelector('#customer-category')?.value || ''
+      const baseProviders = getState().featuredBusinesses.length ? getState().featuredBusinesses : getState().customers
+      const providers = filterProviders(baseProviders, query, category)
       root.querySelector('.customer-grid').innerHTML = renderClientCards(providers, canManageWorkshop(getState().role))
     }
     if (event.target.id === 'request-search' || event.target.id === 'request-category') filterRequests()
@@ -515,7 +531,10 @@ export function createRouter(root = document.querySelector('#app')) {
     if (viewButton) {
       event.preventDefault()
       const requestedRoute = viewButton.dataset.view
-      if (routes[requestedRoute]) window.location.hash = `/${requestedRoute}`
+      if (routes[requestedRoute]) {
+        sidebarOpen = false
+        window.location.hash = `/${requestedRoute}`
+      }
       return
     }
     const actionButton = event.target.closest('[data-action]')
