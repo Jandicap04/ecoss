@@ -1,6 +1,21 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
 
 :root { --ink: #20211d; --muted: #77786f; --line: #e9e7e0; --paper: #fbfaf7; --orange: #ee6e4e; --orange-dark: #d9573c; --green: #266653; --blue: #4a718d; --purple: #7569a9; --shadow: 0 18px 50px rgba(47, 43, 32, .06); font-family: 'Manrope', sans-serif; color: var(--ink); background: var(--paper); font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+/* Paleta PACOTIZAR: azul tinta, amarillo cálido, verde petróleo y marfil. */
+:root { --ink: #16324F; --muted: #667482; --line: #e5e4dc; --paper: #F7F4EA; --orange: #FFC857; --orange-dark: #16324F; --green: #176B63; --blue: #16324F; --shadow: 0 18px 50px rgba(22, 50, 79, .07); color: var(--ink); background: var(--paper); }
+body { background: var(--paper); }
+.main-content::before { background-image: linear-gradient(90deg, rgba(247,244,234,.92), rgba(247,244,234,.76)), url('/IMAGENES.png'); }
+.nav-item.active, .filter-tab.active, .request-scope-switch button.active { color: #16324F; background: #FFF1C7; }
+.primary-button { border-color: #FFC857; background: #FFC857; color: #16324F; box-shadow: 0 7px 16px rgba(22,50,79,.12); }
+.primary-button:hover { border-color: #E8AF37; background: #E8AF37; color: #16324F; }
+.metric-icon.orange, .service-icon, .gmail-mark, .empty-feed-icon { background: #FFF1C7; color: #16324F; }
+.metric-icon.blue { background: #E8EEF2; color: #16324F; }
+.trial-spark, .modal-spark { background: #FFF1C7; color: #16324F; }
+.market-category { background: #FFF1C7; color: #16324F; }
+.plan-option.selected { border-color: #FFC857; background: #FFFAE9; box-shadow: 0 0 0 2px #FFF1C7; }
+.plan-card { background: #FFFAE9; border-color: #F0E2B9; }
+.search-box:focus-within, .market-category-filter select:focus { border-color: #176B63; box-shadow: 0 0 0 3px rgba(23,107,99,.12); }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid rgba(23,107,99,.45); outline-offset: 2px; }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; min-height: 100vh; background: #f8f7f3; }
 button, input, select { font: inherit; }
