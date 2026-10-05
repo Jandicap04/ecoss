@@ -36,13 +36,13 @@ function navItem(view, icon, label, count, active) {
   return `<button class="nav-item ${active === view ? 'active' : ''}" data-view="${view}">${icon}<span>${label}</span>${count ? `<em>${count}</em>` : ''}</button>`
 }
 
-function renderShell(state, route, viewMarkup, modalMarkup, toast, accountMenuOpen, sidebarOpen = false) {
+function renderShell(state, route, viewMarkup, modalMarkup, toast, accountMenuOpen, sidebarOpen = false, theme = 'light') {
   const profile = state.profile
   const displayName = profile.name || (state.role === 'administrator' ? 'Administrador principal' : 'Usuario del marketplace')
   const initials = profile.initials || displayName.trim().split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase()
   const allowSettings = canManageWorkshop(state.role)
   const nav = `${navItem('dashboard', icons.grid, 'Resumen', 0, route)}${navItem('requests', icons.file, 'Solicitudes', state.quoteRequests.length, route)}${navItem('quotes', icons.file, 'Cotizaciones', state.quotes.length, route)}${navItem('customers', icons.users, 'Proveedores', 0, route)}${navItem('services', icons.box, 'Servicios', 0, route)}${allowSettings ? `<p class="nav-caption nav-caption-spaced">CONFIGURACIÓN</p>${navItem('settings', icons.gear, 'Ajustes', 0, route)}` : ''}${state.role === 'administrator' ? `<p class="nav-caption nav-caption-spaced">PLATAFORMA</p>${navItem('admin', icons.gear, 'Admin principal', 0, route)}` : ''}`
-  return `<div class="app-shell"><div class="sidebar-backdrop ${sidebarOpen ? 'visible' : ''}" data-action="toggle-sidebar"></div><aside class="sidebar ${sidebarOpen ? 'open' : ''}" id="sidebar"><div class="brand"><span class="brand-logo-frame"><img src="/IMAGENES.png" alt="Pacotizar" /></span><span class="brand-word">PAC<span>OTIZAR</span></span></div><div class="workspace-switcher"><span class="avatar avatar-small">${escapeHtml(initials)}</span><span><b>${escapeHtml(profile.workshop || 'Mi negocio')}</b><small>Marketplace activo</small></span><span class="chevron">⌄</span></div><nav class="main-nav" aria-label="Navegación principal"><p class="nav-caption">OPERACIÓN</p>${nav}</nav><div class="sidebar-bottom"><div class="help-card"><span class="help-icon">?</span><div><b>¿Necesitas ayuda?</b><small>Habla con soporte</small></div><span class="help-arrow">${icons.arrow}</span></div><div class="user-line"><span class="avatar">${escapeHtml(initials)}</span><span><b>${escapeHtml(displayName)}</b><small>${escapeHtml(roleName(state.role))}</small></span>${state.user ? `<button class="icon-btn account-menu-trigger" data-action="account-menu" aria-expanded="${accountMenuOpen}" aria-label="Opciones de la cuenta">•••</button>` : ''}</div>${accountMenuOpen && state.user ? `<div class="account-menu" role="menu"><div class="account-menu-heading"><b>${escapeHtml(displayName)}</b><small>${escapeHtml(roleName(state.role))}</small></div><button type="button" role="menuitem" data-action="sign-out">Cerrar sesión</button></div>` : ''}</div></aside><main class="main-content"><header class="topbar"><button class="mobile-menu icon-btn" data-action="toggle-sidebar" aria-label="Abrir menú">${icons.menu}</button><div class="breadcrumb"><span>Workspace</span><i>/</i><b>${routes[route].title}</b></div><div class="top-actions"><button class="icon-btn notification-btn" data-action="notifications" aria-label="Notificaciones">${icons.bell}<span></span></button><div class="top-avatar avatar">${escapeHtml(initials)}</div></div></header><div class="page-content">${viewMarkup}</div></main></div>${modalMarkup}<div class="toast-region" aria-live="polite">${toast ? `<div class="toast toast-${escapeHtml(toast.tone)}">${toast.tone === 'error' ? icons.alert : icons.check}<span>${escapeHtml(toast.message)}</span></div>` : ''}</div>`
+  return `<div class="app-shell"><div class="sidebar-backdrop ${sidebarOpen ? 'visible' : ''}" data-action="toggle-sidebar"></div><aside class="sidebar ${sidebarOpen ? 'open' : ''}" id="sidebar"><div class="brand"><span class="brand-logo-frame"><img src="/IMAGENES.png" alt="Pacotizar" /></span><span class="brand-word">PAC<span>OTIZAR</span></span></div><div class="workspace-switcher"><span class="avatar avatar-small">${escapeHtml(initials)}</span><span><b>${escapeHtml(profile.workshop || 'Mi negocio')}</b><small>Marketplace activo</small></span><span class="chevron">⌄</span></div><nav class="main-nav" aria-label="Navegación principal"><p class="nav-caption">OPERACIÓN</p>${nav}</nav><div class="sidebar-bottom"><div class="help-card"><span class="help-icon">?</span><div><b>¿Necesitas ayuda?</b><small>Habla con soporte</small></div><span class="help-arrow">${icons.arrow}</span></div><div class="user-line"><span class="avatar">${escapeHtml(initials)}</span><span><b>${escapeHtml(displayName)}</b><small>${escapeHtml(roleName(state.role))}</small></span>${state.user ? `<button class="icon-btn account-menu-trigger" data-action="account-menu" aria-expanded="${accountMenuOpen}" aria-label="Opciones de la cuenta">•••</button>` : ''}</div>${accountMenuOpen && state.user ? `<div class="account-menu" role="menu"><div class="account-menu-heading"><b>${escapeHtml(displayName)}</b><small>${escapeHtml(roleName(state.role))}</small></div><button type="button" role="menuitem" data-action="sign-out">Cerrar sesión</button></div>` : ''}</div></aside><main class="main-content"><header class="topbar"><button class="mobile-menu icon-btn" data-action="toggle-sidebar" aria-label="Abrir menú">${icons.menu}</button><div class="breadcrumb"><span>Workspace</span><i>/</i><b>${routes[route].title}</b></div><div class="top-actions"><button class="icon-btn theme-toggle" type="button" data-action="toggle-theme" aria-label="Activar modo ${theme === 'dark' ? 'claro' : 'oscuro'}" title="Cambiar a modo ${theme === 'dark' ? 'claro' : 'oscuro'}">${theme === 'dark' ? '☀' : '☾'}</button><button class="icon-btn notification-btn" data-action="notifications" aria-label="Notificaciones">${icons.bell}<span></span></button><div class="top-avatar avatar">${escapeHtml(initials)}</div></div></header><div class="page-content">${viewMarkup}</div></main></div>${modalMarkup}<div class="toast-region" aria-live="polite">${toast ? `<div class="toast toast-${escapeHtml(toast.tone)}">${toast.tone === 'error' ? icons.alert : icons.check}<span>${escapeHtml(toast.message)}</span></div>` : ''}</div>`
 }
 
 export function createRouter(root = document.querySelector('#app')) {
@@ -61,6 +61,9 @@ export function createRouter(root = document.querySelector('#app')) {
   let sidebarOpen = false
   let sessionLoaded = false
   let pendingPasswordRecovery = false
+  let theme = localStorage.getItem('pacotizar-theme') || (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+  document.documentElement.dataset.theme = theme
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#101B26' : '#F7F4EA')
 
   function notify(message, tone = 'info') {
     clearTimeout(toastTimer)
@@ -176,7 +179,7 @@ export function createRouter(root = document.querySelector('#app')) {
       canManage: canManageWorkshop(currentState.role),
       requestOffers,
       requestOfferError,
-    }), toast, accountMenuOpen, sidebarOpen)
+    }), toast, accountMenuOpen, sidebarOpen, theme)
   }
 
   async function submitQuote(event) {
@@ -205,7 +208,13 @@ export function createRouter(root = document.querySelector('#app')) {
 
   async function handleAction(action, element) {
     const state = getState()
-    if (action === 'account-menu') accountMenuOpen = !accountMenuOpen
+    if (action === 'toggle-theme') {
+      theme = theme === 'dark' ? 'light' : 'dark'
+      localStorage.setItem('pacotizar-theme', theme)
+      document.documentElement.dataset.theme = theme
+      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#101B26' : '#F7F4EA')
+    }
+    else if (action === 'account-menu') accountMenuOpen = !accountMenuOpen
     else if (action === 'toggle-sidebar') sidebarOpen = !sidebarOpen
     else if (action === 'sign-out') {
       try {

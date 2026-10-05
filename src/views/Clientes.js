@@ -3,6 +3,8 @@ import { escapeHtml, icons, initials } from '../utils/ui.js'
 function normalizeProvider(item) {
   if (!item || typeof item !== 'object') return null
   const name = item.name || item.business || 'Proveedor'
+  const serviceList = Array.isArray(item.services) ? item.services.filter(Boolean).slice(0, 3) : []
+  const tagList = Array.isArray(item.tags) ? item.tags.filter(Boolean).slice(0, 3) : []
   return {
     id: item.id || item.workshop_id || name,
     name,
@@ -14,6 +16,8 @@ function normalizeProvider(item) {
     description: item.description || 'Proveedor disponible para colaborar en Pacotizar.',
     city: item.city || item.location || 'Bogotá',
     logo_url: item.logo_url || '',
+    featured: Boolean(item.featured || item.is_featured || item.highlighted || item.featured_business),
+    services: Array.isArray(item.services) ? item.services.slice(0, 3) : Array.isArray(item.service_list) ? item.service_list.slice(0, 3) : tagList,
   }
 }
 
@@ -51,7 +55,13 @@ export function renderClientCards(clients, canManage) {
     return '<div class="empty-feed"><span class="empty-feed-icon">✦</span><h3>No hay proveedores visibles</h3><p>Aún no hay negocios activos para mostrar en el marketplace.</p></div>'
   }
 
-  return providers.map((provider) => `<article class="customer-card"><div class="customer-card-top"><span class="customer-avatar large">${initials(provider.name)}</span>${canManage ? `<button class="more-button" data-action="delete-customer" data-id="${escapeHtml(provider.id)}" aria-label="Eliminar ${escapeHtml(provider.name)}">×</button>` : ''}</div><h3>${escapeHtml(provider.name)}</h3><p>${escapeHtml(provider.category)}</p><div class="customer-vehicle">${icons.car}<span>${escapeHtml(provider.city)}</span></div><div class="customer-card-foot"><span>${Number(provider.visits) || 0} trabajos</span><b>${escapeHtml(provider.description)}</b></div><button class="text-button" data-action="business-detail" data-id="${escapeHtml(provider.id)}">Ver negocio ${icons.arrow}</button></article>`).join('')
+  return providers.map((provider) => {
+    const featuredBadge = provider.featured ? '<span class="provider-badge">Destacado</span>' : ''
+    const services = Array.isArray(provider.services) && provider.services.length ? provider.services.slice(0, 2) : []
+    const serviceMarkup = services.length ? `<div class="provider-services">${services.map((service) => `<span>${escapeHtml(service)}</span>`).join('')}</div>` : ''
+
+    return `<article class="customer-card ${provider.featured ? 'featured-provider' : ''}"><div class="customer-card-top"><span class="customer-avatar large">${initials(provider.name)}</span>${featuredBadge}${canManage ? `<button class="more-button" data-action="delete-customer" data-id="${escapeHtml(provider.id)}" aria-label="Eliminar ${escapeHtml(provider.name)}">×</button>` : ''}</div><h3>${escapeHtml(provider.name)}</h3><p>${escapeHtml(provider.category)}</p><div class="customer-vehicle">${icons.car}<span>${escapeHtml(provider.city)}</span></div><div class="customer-card-foot"><span>${Number(provider.visits) || 0} trabajos</span><b>${escapeHtml(provider.description)}</b></div>${serviceMarkup}<button class="text-button" data-action="business-detail" data-id="${escapeHtml(provider.id)}">Ver negocio ${icons.arrow}</button></article>`
+  }).join('')
 }
 
 export function renderClients({ clients, canManage }) {
