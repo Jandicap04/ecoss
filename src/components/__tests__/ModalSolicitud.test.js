@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { renderRequestModal } from '../ModalSolicitud.js'
-import { filterProviders } from '../../views/Clientes.js'
+import { filterProviders, sortProviders } from '../../views/Clientes.js'
 
 test('renderRequestModal prefill keeps the selected provider context', () => {
   const html = renderRequestModal({
@@ -25,4 +25,16 @@ test('filterProviders matches category and city search together', () => {
   const result = filterProviders(providers, 'bogotá', 'mantenimiento')
 
   assert.deepEqual(result.map((provider) => provider.name), ['Carolina Díaz'])
+})
+
+test('sortProviders prioritizes the most relevant provider first', () => {
+  const providers = [
+    { name: 'Alicia', city: 'Bogotá', category: 'Proveedor general', visits: 2 },
+    { name: 'Bruno', city: 'Cali', category: 'Mantenimiento', visits: 8 },
+    { name: 'Carmen', city: 'Medellín', category: 'Proveedor general', visits: 4 },
+  ]
+
+  const result = sortProviders(providers, 'relevance')
+
+  assert.deepEqual(result.map((provider) => provider.name), ['Bruno', 'Carmen', 'Alicia'])
 })

@@ -4,7 +4,7 @@ import * as marketplaceService from '../services/marketplaceService.js'
 import { renderModal } from '../components/ModalGeneral.js'
 import { renderDashboard } from '../views/Dashboard.js'
 import { renderQuotes, renderQuoteRows } from '../views/Cotizaciones.js'
-import { renderClients, renderClientCards, filterProviders } from '../views/Clientes.js'
+import { renderClients, renderClientCards, filterProviders, sortProviders } from '../views/Clientes.js'
 import { renderServices } from '../views/Servicios.js'
 import { renderSettings } from '../views/Ajustes.js'
 import { renderAdminPrincipal } from '../views/AdminPrincipal.js'
@@ -347,11 +347,12 @@ export function createRouter(root = document.querySelector('#app')) {
       const query = event.target.value.toLocaleLowerCase()
       root.querySelector('#all-quotes').innerHTML = renderQuoteRows(getState().quotes.filter((quote) => `${quote.customer} ${quote.vehicle}`.toLocaleLowerCase().includes(query)))
     }
-    if (event.target.id === 'customer-search' || event.target.id === 'customer-category') {
+    if (event.target.id === 'customer-search' || event.target.id === 'customer-category' || event.target.id === 'customer-sort') {
       const query = root.querySelector('#customer-search')?.value || ''
       const category = root.querySelector('#customer-category')?.value || ''
+      const sort = root.querySelector('#customer-sort')?.value || 'relevance'
       const baseProviders = getState().featuredBusinesses.length ? getState().featuredBusinesses : getState().customers
-      const providers = filterProviders(baseProviders, query, category)
+      const providers = sortProviders(filterProviders(baseProviders, query, category), sort)
       root.querySelector('.customer-grid').innerHTML = renderClientCards(providers, canManageWorkshop(getState().role))
     }
     if (event.target.id === 'request-search' || event.target.id === 'request-category') filterRequests()
@@ -385,6 +386,15 @@ export function createRouter(root = document.querySelector('#app')) {
   function handleChange(event) {
     if (event.target.id === 'request-category') {
       filterRequests()
+      return
+    }
+    if (event.target.id === 'customer-sort' || event.target.id === 'customer-category') {
+      const query = root.querySelector('#customer-search')?.value || ''
+      const category = root.querySelector('#customer-category')?.value || ''
+      const sort = root.querySelector('#customer-sort')?.value || 'relevance'
+      const baseProviders = getState().featuredBusinesses.length ? getState().featuredBusinesses : getState().customers
+      const providers = sortProviders(filterProviders(baseProviders, query, category), sort)
+      root.querySelector('.customer-grid').innerHTML = renderClientCards(providers, canManageWorkshop(getState().role))
       return
     }
     if (!event.target.matches('select[name="service"]')) return
