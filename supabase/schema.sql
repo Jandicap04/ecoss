@@ -1,435 +1,356 @@
--- CotizaRapido: esquema inicial para Supabase/PostgreSQL
--- Ejecutar completo en Supabase SQL Editor.
--- No expone claves ni depende de Stripe: la monetizacion se registra por anuncios.
+-- ==========================================
+-- PACOTIZAR - Base de datos para Supabase
+-- ==========================================
+-- Base esperada: pacotizar
+-- Objetivo:
+-- - Usar tablas principales en español.
+-- - Mantener vistas compatibilidad en inglés para que la app actual siga funcionando.
 
-create extension if not exists pgcrypto;
+BEGIN;
 
-do $$
-begin
-  create type public.member_role as enum ('owner', 'admin', 'advisor');
-exception
-  when duplicate_object then null;
-end $$;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-do $$
-begin
-  create type public.quote_status as enum ('draft', 'sent', 'viewed', 'approved', 'rejected', 'expired');
-exception
-  when duplicate_object then null;
-end $$;
-
-do $$
-begin
-  create type public.ad_event_type as enum ('impression', 'click', 'conversion');
-exception
-  when duplicate_object then null;
-end $$;
-
-create table public.profiles (
-  id uuid primary key references auth.users(id) on delete cascade,
-  full_name text not null,
-  phone text,
+-- =========================================================
+-- 1) Perfiles de usuarios
+-- =========================================================
+CREATE TABLE IF NOT EXISTS public.perfiles (
+  id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  nombre text,
+  telefono text,
+  ciudad text,
+  rol text NOT NULL DEFAULT 'owner' CHECK (rol IN ('owner', 'admin', 'administrator', 'advisor')),
   avatar_url text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
 
--- Administradores de toda la plataforma, separados de los usuarios de un taller.
-create table public.platform_admins (
-  profile_id uuid primary key references public.profiles(id) on delete cascade,
-  admin_email text not null unique,
-  active boolean not null default true,
-  created_at timestamptz not null default now()
+ALTER TABLE public.perfiles ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "usuarios pueden ver su perfil" ON public.perfiles;
+CREATE POLICY "usuarios pueden ver su perfil"
+  ON public.perfiles FOR SELECT
+  USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "usuarios pueden crear su perfil" ON public.perfiles;
+CREATE POLICY "usuarios pueden crear su perfil"
+  ON public.perfiles FOR INSERT
+  WITH CHECK (auth.uid() = id);
+
+DROP POLICY IF EXISTS "usuarios pueden actualizar su perfil" ON public.perfiles;
+CREATE POLICY "usuarios pueden actualizar su perfil"
+  ON public.perfiles FOR UPDATE
+  USING (auth.uid() = id);
+
+-- =========================================================
+-- 2) Administradores de plataforma
+-- =========================================================
+CREATE TABLE IF NOT EXISTS public.administradores_plataforma (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id uuid NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
+  activo boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now()
 );
 
--- Solo guarda la identidad y el estado de OAuth. Los tokens se deben manejar en
--- una Edge Function o en Supabase Vault, nunca en el navegador.
-create table public.gmail_connections (
-  id uuid primary key default gen_random_uuid(),
-  platform_admin_id uuid not null references public.platform_admins(profile_id) on delete cascade,
-  gmail_email text not null,
-  google_account_id text,
-  scopes text[] not null default '{}',
-  status text not null default 'connected' check (status in ('connected', 'expired', 'revoked')),
-  token_expires_at timestamptz,
-  connected_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (platform_admin_id, gmail_email)
-);
+ALTER TABLE public.administradores_plataforma ENABLE ROW LEVEL SECURITY;
 
-create table public.workshops (
-  id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null references public.profiles(id) on delete restrict,
-  name text not null,
-  city text,
-  country_code char(2) not null default 'CO',
-  currency char(3) not null default 'COP',
-  whatsapp_number text,
-  tax_rate numeric(5,2) not null default 0 check (tax_rate >= 0 and tax_rate <= 100),
-  logo_url text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
+CREATE OR REPLACE FUNCTION public.es_administrador_plataforma()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.administradores_plataforma ap
+    WHERE ap.profile_id = (SELECT auth.uid())
+      AND ap.activo = true
+  );
+$$;
 
-create table public.workshop_members (
-  workshop_id uuid not null references public.workshops(id) on delete cascade,
-  profile_id uuid not null references public.profiles(id) on delete cascade,
-  role public.member_role not null default 'advisor',
-  created_at timestamptz not null default now(),
-  primary key (workshop_id, profile_id)
-);
+REVOKE ALL ON FUNCTION public.es_administrador_plataforma() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.es_administrador_plataforma() TO anon, authenticated;
 
-create table public.customers (
-  id uuid primary key default gen_random_uuid(),
-  workshop_id uuid not null references public.workshops(id) on delete cascade,
-  full_name text not null,
-  phone text,
+DROP POLICY IF EXISTS "admins pueden ver administradores" ON public.administradores_plataforma;
+CREATE POLICY "admins pueden ver administradores"
+  ON public.administradores_plataforma FOR SELECT
+  USING (profile_id = (SELECT auth.uid()) OR public.es_administrador_plataforma());
+
+DROP POLICY IF EXISTS "admins pueden insertar administradores" ON public.administradores_plataforma;
+CREATE POLICY "admins pueden insertar administradores"
+  ON public.administradores_plataforma FOR INSERT
+  WITH CHECK (public.es_administrador_plataforma());
+
+-- =========================================================
+-- 3) Talleres / negocios / proveedores
+-- =========================================================
+CREATE TABLE IF NOT EXISTS public.talleres (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  propietario_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  nombre text NOT NULL,
+  ciudad text,
+  descripcion text,
+  telefono text,
   email text,
-  notes text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  logo_url text,
+  sitio_web text,
+  activo boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-create table public.vehicles (
-  id uuid primary key default gen_random_uuid(),
-  customer_id uuid not null references public.customers(id) on delete cascade,
-  brand text,
-  model text,
-  model_year smallint check (model_year between 1886 and 2200),
-  plate text,
-  mileage integer check (mileage is null or mileage >= 0),
-  created_at timestamptz not null default now()
+ALTER TABLE public.talleres ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "todos pueden ver talleres activos" ON public.talleres;
+CREATE POLICY "todos pueden ver talleres activos"
+  ON public.talleres FOR SELECT
+  USING (
+    activo = true OR
+    propietario_id = auth.uid() OR
+    public.es_administrador_plataforma()
+  );
+
+DROP POLICY IF EXISTS "dueños pueden crear talleres" ON public.talleres;
+CREATE POLICY "dueños pueden crear talleres"
+  ON public.talleres FOR INSERT
+  WITH CHECK (propietario_id = auth.uid());
+
+DROP POLICY IF EXISTS "dueños pueden actualizar sus talleres" ON public.talleres;
+CREATE POLICY "dueños pueden actualizar sus talleres"
+  ON public.talleres FOR UPDATE
+  USING (propietario_id = auth.uid());
+
+DROP POLICY IF EXISTS "admins pueden gestionar talleres" ON public.talleres;
+CREATE POLICY "admins pueden gestionar talleres"
+  ON public.talleres FOR UPDATE
+  USING (public.es_administrador_plataforma());
+
+-- =========================================================
+-- 4) Solicitudes / cotizaciones del marketplace
+-- =========================================================
+CREATE TABLE IF NOT EXISTS public.solicitudes_cotizacion (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  solicitante_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  titulo text NOT NULL,
+  descripcion text NOT NULL,
+  ciudad text,
+  presupuesto numeric(12,2),
+  categoria text,
+  etiquetas text[] NOT NULL DEFAULT '{}',
+  imagenes text[] NOT NULL DEFAULT '{}',
+  estado text NOT NULL DEFAULT 'open' CHECK (estado IN ('open', 'closed', 'draft')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-create table public.services (
-  id uuid primary key default gen_random_uuid(),
-  workshop_id uuid not null references public.workshops(id) on delete cascade,
-  name text not null,
+ALTER TABLE public.solicitudes_cotizacion ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "todos pueden ver solicitudes abiertas" ON public.solicitudes_cotizacion;
+CREATE POLICY "todos pueden ver solicitudes abiertas"
+  ON public.solicitudes_cotizacion FOR SELECT
+  USING (
+    estado = 'open' OR
+    solicitante_id = auth.uid() OR
+    public.es_administrador_plataforma()
+  );
+
+DROP POLICY IF EXISTS "usuarios autenticados pueden crear solicitudes" ON public.solicitudes_cotizacion;
+CREATE POLICY "usuarios autenticados pueden crear solicitudes"
+  ON public.solicitudes_cotizacion FOR INSERT
+  WITH CHECK (auth.uid() = solicitante_id);
+
+DROP POLICY IF EXISTS "usuarios pueden actualizar sus solicitudes" ON public.solicitudes_cotizacion;
+CREATE POLICY "usuarios pueden actualizar sus solicitudes"
+  ON public.solicitudes_cotizacion FOR UPDATE
+  USING (solicitante_id = auth.uid());
+
+DROP POLICY IF EXISTS "admins pueden gestionar solicitudes" ON public.solicitudes_cotizacion;
+CREATE POLICY "admins pueden gestionar solicitudes"
+  ON public.solicitudes_cotizacion FOR UPDATE
+  USING (public.es_administrador_plataforma());
+
+-- =========================================================
+-- 5) Negocios destacados en el marketplace
+-- =========================================================
+CREATE TABLE IF NOT EXISTS public.negocios_destacados (
+  workshop_id uuid PRIMARY KEY REFERENCES public.talleres(id) ON DELETE CASCADE,
+  categoria text,
+  descripcion text,
+  activo boolean NOT NULL DEFAULT true,
+  orden integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.negocios_destacados ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "todos pueden ver destacados activos" ON public.negocios_destacados;
+CREATE POLICY "todos pueden ver destacados activos"
+  ON public.negocios_destacados FOR SELECT
+  USING (activo = true);
+
+DROP POLICY IF EXISTS "admins pueden gestionar destacados" ON public.negocios_destacados;
+CREATE POLICY "admins pueden gestionar destacados"
+  ON public.negocios_destacados FOR ALL
+  USING (public.es_administrador_plataforma())
+  WITH CHECK (public.es_administrador_plataforma());
+
+-- =========================================================
+-- 6) Trigger para updated_at
+-- =========================================================
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS trigger AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_perfiles_updated_at ON public.perfiles;
+CREATE TRIGGER trg_perfiles_updated_at
+BEFORE UPDATE ON public.perfiles
+FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_talleres_updated_at ON public.talleres;
+CREATE TRIGGER trg_talleres_updated_at
+BEFORE UPDATE ON public.talleres
+FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_solicitudes_updated_at ON public.solicitudes_cotizacion;
+CREATE TRIGGER trg_solicitudes_updated_at
+BEFORE UPDATE ON public.solicitudes_cotizacion
+FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_negocios_destacados_updated_at ON public.negocios_destacados;
+CREATE TRIGGER trg_negocios_destacados_updated_at
+BEFORE UPDATE ON public.negocios_destacados
+FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- =========================================================
+-- 7) Índices útiles
+-- =========================================================
+CREATE INDEX IF NOT EXISTS idx_perfiles_rol ON public.perfiles (rol);
+CREATE INDEX IF NOT EXISTS idx_talleres_ciudad ON public.talleres (ciudad);
+CREATE INDEX IF NOT EXISTS idx_talleres_activo ON public.talleres (activo);
+CREATE INDEX IF NOT EXISTS idx_solicitudes_estado ON public.solicitudes_cotizacion (estado);
+CREATE INDEX IF NOT EXISTS idx_solicitudes_fecha ON public.solicitudes_cotizacion (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_negocios_destacados_activo_orden ON public.negocios_destacados (activo, orden);
+
+-- =========================================================
+-- 8) Vistas de compatibilidad para la app actual
+--    La app actual consulta nombres en inglés, así que aquí
+--    mantemos esos nombres sin romper la idea de tablas en español.
+-- =========================================================
+CREATE OR REPLACE VIEW public.platform_admins WITH (security_invoker = true) AS
+SELECT
+  profile_id,
+  activo AS active,
+  created_at,
+  id
+FROM public.administradores_plataforma;
+
+CREATE OR REPLACE VIEW public.quote_requests WITH (security_invoker = true) AS
+SELECT
+  id,
+  solicitante_id AS requester_id,
+  titulo AS title,
+  descripcion AS description,
+  ciudad AS location,
+  presupuesto AS budget_amount,
+  categoria AS category,
+  etiquetas AS tags,
+  imagenes AS image_urls,
+  estado AS status,
+  created_at
+FROM public.solicitudes_cotizacion;
+
+CREATE OR REPLACE VIEW public.workshops WITH (security_invoker = true) AS
+SELECT
+  id,
+  nombre AS name,
+  ciudad AS city,
+  logo_url,
+  descripcion,
+  telefono,
+  email,
+  sitio_web,
+  activo,
+  propietario_id,
+  created_at,
+  updated_at
+FROM public.talleres;
+
+CREATE OR REPLACE VIEW public.featured_businesses WITH (security_invoker = true) AS
+SELECT
+  workshop_id,
+  activo AS is_active,
+  orden AS sort_order,
+  categoria AS category,
+  descripcion AS description,
+  created_at
+FROM public.negocios_destacados;
+
+-- =========================================================
+-- 9) Trigger para crear perfil al registrar usuario
+-- =========================================================
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.perfiles (id, nombre)
+  VALUES (NEW.id, COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email))
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+AFTER INSERT ON auth.users
+FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- =========================================================
+-- 10) Función de negocios destacados para la app
+-- =========================================================
+CREATE OR REPLACE FUNCTION public.get_featured_businesses()
+RETURNS TABLE (
+  workshop_id uuid,
+  name text,
+  city text,
   category text,
   description text,
-  default_price numeric(12,2) not null default 0 check (default_price >= 0),
-  active boolean not null default true,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (workshop_id, name)
-);
-
-create table public.quotes (
-  id uuid primary key default gen_random_uuid(),
-  workshop_id uuid not null references public.workshops(id) on delete cascade,
-  customer_id uuid not null references public.customers(id) on delete restrict,
-  vehicle_id uuid references public.vehicles(id) on delete set null,
-  quote_number text not null,
-  status public.quote_status not null default 'draft',
-  client_budget_min numeric(12,2) check (client_budget_min is null or client_budget_min >= 0),
-  client_budget_max numeric(12,2) check (client_budget_max is null or client_budget_max >= 0),
-  client_budget_notes text,
-  currency char(3) not null default 'COP',
-  subtotal numeric(12,2) not null default 0 check (subtotal >= 0),
-  discount numeric(12,2) not null default 0 check (discount >= 0),
-  tax numeric(12,2) not null default 0 check (tax >= 0),
-  total numeric(12,2) not null default 0 check (total >= 0),
-  public_token text not null unique default encode(gen_random_bytes(16), 'hex'),
-  expires_at timestamptz,
-  sent_at timestamptz,
-  viewed_at timestamptz,
-  approved_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (workshop_id, quote_number),
-  check (client_budget_min is null or client_budget_max is null or client_budget_min <= client_budget_max)
-);
-
-create table public.quote_items (
-  id uuid primary key default gen_random_uuid(),
-  quote_id uuid not null references public.quotes(id) on delete cascade,
-  service_id uuid references public.services(id) on delete set null,
-  description text not null,
-  quantity numeric(10,2) not null default 1 check (quantity > 0),
-  unit_price numeric(12,2) not null check (unit_price >= 0),
-  total numeric(12,2) generated always as (quantity * unit_price) stored
-);
-
--- Publicaciones anonimizadas para el feed: nunca guardan el nombre del cliente.
-create table public.community_feed_posts (
-  id uuid primary key default gen_random_uuid(),
-  workshop_id uuid not null references public.workshops(id) on delete cascade,
-  quote_id uuid unique references public.quotes(id) on delete cascade,
-  vehicle_label text not null,
-  quote_status public.quote_status not null,
-  total numeric(12,2) not null default 0 check (total >= 0),
-  visible boolean not null default true,
-  created_at timestamptz not null default now()
-);
-
--- Campanas/espacios publicitarios aprobados para monetizar la plataforma.
-create table public.ad_campaigns (
-  id uuid primary key default gen_random_uuid(),
-  advertiser_name text not null,
-  title text not null,
-  creative_url text,
-  target_url text,
-  active boolean not null default true,
-  payout_per_impression numeric(12,4) not null default 0 check (payout_per_impression >= 0),
-  payout_per_click numeric(12,4) not null default 0 check (payout_per_click >= 0),
-  starts_at timestamptz,
-  ends_at timestamptz,
-  created_at timestamptz not null default now()
-);
-
-create table public.ad_events (
-  id uuid primary key default gen_random_uuid(),
-  campaign_id uuid not null references public.ad_campaigns(id) on delete cascade,
-  workshop_id uuid references public.workshops(id) on delete set null,
-  event_type public.ad_event_type not null,
-  payout_amount numeric(12,4) not null default 0 check (payout_amount >= 0),
-  metadata jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now()
-);
-
-create index customers_workshop_idx on public.customers(workshop_id);
-create index vehicles_customer_idx on public.vehicles(customer_id);
-create index services_workshop_active_idx on public.services(workshop_id, active);
-create index quotes_workshop_status_idx on public.quotes(workshop_id, status);
-create index quotes_created_at_idx on public.quotes(created_at desc);
-create index quote_items_quote_idx on public.quote_items(quote_id);
-create index community_feed_visible_idx on public.community_feed_posts(visible, created_at desc);
-create index ad_events_campaign_idx on public.ad_events(campaign_id, created_at desc);
-create index ad_events_workshop_idx on public.ad_events(workshop_id, created_at desc);
-create index gmail_connections_admin_idx on public.gmail_connections(platform_admin_id);
-
-create or replace function public.is_workshop_member(target_workshop_id uuid)
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1 from public.workshops
-    where id = target_workshop_id and owner_id = auth.uid()
-    union all
-    select 1 from public.workshop_members
-    where workshop_id = target_workshop_id and profile_id = auth.uid()
-  );
+  logo_url text,
+  sort_order integer
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    fb.workshop_id,
+    w.nombre AS name,
+    w.ciudad AS city,
+    COALESCE(fb.categoria, 'Proveedor general') AS category,
+    COALESCE(fb.descripcion, 'Negocio destacado en Pacotizar') AS description,
+    w.logo_url,
+    fb.orden AS sort_order
+  FROM public.negocios_destacados fb
+  JOIN public.talleres w ON w.id = fb.workshop_id
+  WHERE fb.activo = true
+  ORDER BY fb.orden ASC, w.nombre ASC;
 $$;
 
-create or replace function public.is_workshop_manager(target_workshop_id uuid)
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1 from public.workshops
-    where id = target_workshop_id and owner_id = auth.uid()
-    union all
-    select 1 from public.workshop_members
-    where workshop_id = target_workshop_id
-      and profile_id = auth.uid()
-      and role in ('owner', 'admin')
-  );
-$$;
+-- =========================================================
+-- 11) Ejemplo para crear el primer administrador
+-- =========================================================
+-- Ejecuta esto desde Supabase > SQL Editor después de registrarte en la app.
+-- Reemplaza el correo por el mismo que usaste en Supabase Auth.
+-- Primero puedes comprobar que existe con:
+-- SELECT id, email FROM auth.users WHERE lower(email) = lower('tu-correo@ejemplo.com');
+-- Luego ejecuta:
+-- INSERT INTO public.administradores_plataforma (profile_id, activo)
+-- SELECT id, true
+-- FROM auth.users
+-- WHERE lower(email) = lower('tu-correo@ejemplo.com')
+-- ON CONFLICT (profile_id) DO UPDATE SET activo = true;
 
-create or replace function public.is_platform_admin()
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1
-    from public.platform_admins
-    where profile_id = auth.uid()
-      and active = true
-  );
-$$;
-
-create or replace function public.handle_new_user()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  insert into public.profiles (id, full_name)
-  values (new.id, coalesce(new.raw_user_meta_data ->> 'full_name', split_part(new.email, '@', 1)));
-  return new;
-end;
-$$;
-
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-after insert on auth.users
-for each row execute procedure public.handle_new_user();
-
-alter table public.profiles enable row level security;
-alter table public.platform_admins enable row level security;
-alter table public.gmail_connections enable row level security;
-alter table public.workshops enable row level security;
-alter table public.workshop_members enable row level security;
-alter table public.customers enable row level security;
-alter table public.vehicles enable row level security;
-alter table public.services enable row level security;
-alter table public.quotes enable row level security;
-alter table public.quote_items enable row level security;
-alter table public.community_feed_posts enable row level security;
-alter table public.ad_campaigns enable row level security;
-alter table public.ad_events enable row level security;
-
-create policy "Users manage their own profile"
-on public.profiles for all
-using (id = auth.uid())
-with check (id = auth.uid());
-
-create policy "Platform admins can view profiles"
-on public.profiles for select
-using (public.is_platform_admin());
-
-create policy "Admins can view their platform role"
-on public.platform_admins for select
-using (profile_id = auth.uid() or public.is_platform_admin());
-
-create policy "Admins manage their Gmail connections"
-on public.gmail_connections for all
-using (platform_admin_id = auth.uid() and public.is_platform_admin())
-with check (platform_admin_id = auth.uid() and public.is_platform_admin());
-
-create policy "Members can view workshops"
-on public.workshops for select
-using (public.is_workshop_member(id) or owner_id = auth.uid());
-
-create policy "Owners manage workshops"
-on public.workshops for all
-using (owner_id = auth.uid())
-with check (owner_id = auth.uid());
-
-create policy "Platform admins can view workshops"
-on public.workshops for select
-using (public.is_platform_admin());
-
-create policy "Members can view membership"
-on public.workshop_members for select
-using (profile_id = auth.uid() or public.is_workshop_member(workshop_id));
-
-create policy "Owners manage membership"
-on public.workshop_members for all
-using (exists (select 1 from public.workshops where id = workshop_id and owner_id = auth.uid()))
-with check (exists (select 1 from public.workshops where id = workshop_id and owner_id = auth.uid()));
-
-drop policy if exists "Members manage customers" on public.customers;
-create policy "Members view customers"
-on public.customers for select
-using (public.is_workshop_member(workshop_id));
-create policy "Managers manage customers"
-on public.customers for insert
-with check (public.is_workshop_manager(workshop_id));
-create policy "Managers update customers"
-on public.customers for update
-using (public.is_workshop_manager(workshop_id))
-with check (public.is_workshop_manager(workshop_id));
-create policy "Managers delete customers"
-on public.customers for delete
-using (public.is_workshop_manager(workshop_id));
-
-create policy "Platform admins can view customers"
-on public.customers for select
-using (public.is_platform_admin());
-
-drop policy if exists "Members manage vehicles" on public.vehicles;
-create policy "Members view vehicles"
-on public.vehicles for select
-using (exists (select 1 from public.customers c where c.id = customer_id and public.is_workshop_member(c.workshop_id)));
-create policy "Managers manage vehicles"
-on public.vehicles for all
-using (exists (select 1 from public.customers c where c.id = customer_id and public.is_workshop_manager(c.workshop_id)))
-with check (exists (select 1 from public.customers c where c.id = customer_id and public.is_workshop_manager(c.workshop_id)));
-
-drop policy if exists "Members manage services" on public.services;
-create policy "Members view services"
-on public.services for select
-using (public.is_workshop_member(workshop_id));
-create policy "Managers manage services"
-on public.services for all
-using (public.is_workshop_manager(workshop_id))
-with check (public.is_workshop_manager(workshop_id));
-
-create policy "Members create quotes"
-on public.quotes for insert
-with check (public.is_workshop_member(workshop_id));
-create policy "Members update quotes"
-on public.quotes for update
-using (public.is_workshop_member(workshop_id))
-with check (public.is_workshop_member(workshop_id));
-create policy "Managers delete quotes"
-on public.quotes for delete
-using (public.is_workshop_manager(workshop_id));
-
-create policy "Platform admins can view quotes"
-on public.quotes for select
-using (public.is_platform_admin());
-
-create policy "Members view quote items"
-on public.quote_items for select
-using (exists (select 1 from public.quotes q where q.id = quote_id and public.is_workshop_member(q.workshop_id)));
-create policy "Members create quote items"
-on public.quote_items for insert
-with check (exists (select 1 from public.quotes q where q.id = quote_id and public.is_workshop_member(q.workshop_id)));
-create policy "Members update quote items"
-on public.quote_items for update
-using (exists (select 1 from public.quotes q where q.id = quote_id and public.is_workshop_member(q.workshop_id)))
-with check (exists (select 1 from public.quotes q where q.id = quote_id and public.is_workshop_member(q.workshop_id)));
-create policy "Managers delete quote items"
-on public.quote_items for delete
-using (exists (select 1 from public.quotes q where q.id = quote_id and public.is_workshop_manager(q.workshop_id)));
-
-create policy "Authenticated users view visible feed"
-on public.community_feed_posts for select
-to authenticated
-using (visible = true or public.is_workshop_member(workshop_id));
-
-create policy "Members create feed posts"
-on public.community_feed_posts for insert
-to authenticated
-with check (public.is_workshop_member(workshop_id));
-
-create policy "Managers manage feed posts"
-on public.community_feed_posts for update
-using (public.is_workshop_manager(workshop_id))
-with check (public.is_workshop_manager(workshop_id));
-
-create policy "Managers delete feed posts"
-on public.community_feed_posts for delete
-using (public.is_workshop_manager(workshop_id));
-
-create policy "Authenticated users view active ads"
-on public.ad_campaigns for select
-to authenticated
-using (active = true and (starts_at is null or starts_at <= now()) and (ends_at is null or ends_at >= now()));
-
-create policy "Members record ad events"
-on public.ad_events for insert
-to authenticated
-with check (workshop_id is null or public.is_workshop_member(workshop_id));
-
-create policy "Members view their ad revenue events"
-on public.ad_events for select
-to authenticated
-using (workshop_id is null or public.is_workshop_member(workshop_id));
-
-create policy "Platform admins manage ad campaigns"
-on public.ad_campaigns for all
-to authenticated
-using (public.is_platform_admin())
-with check (public.is_platform_admin());
-
-create policy "Platform admins view all ad events"
-on public.ad_events for select
-to authenticated
-using (public.is_platform_admin());
-
--- Crear el primer taller despues del registro:
--- insert into public.workshops (owner_id, name, city) values (auth.uid(), 'Mi taller', 'Bogota') returning id;
--- insert into public.workshop_members (workshop_id, profile_id, role) values ('ID_DEL_TALLER', auth.uid(), 'owner');
+COMMIT;

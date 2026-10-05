@@ -1,6 +1,6 @@
 # PACOTIZAR
 
-MVP de un Micro-SaaS para talleres mecánicos. Permite crear cotizaciones profesionales, consultar clientes, administrar servicios y visualizar el estado comercial del taller.
+Marketplace de solicitudes de cotización con un panel operativo para proveedores. Permite publicar necesidades, explorar solicitudes abiertas, descubrir proveedores destacados y, en el módulo de taller, administrar cotizaciones, clientes y servicios.
 
 ## Ejecutar el proyecto
 
@@ -47,11 +47,19 @@ Para publicar una aplicación nativa en Google Play o App Store, el siguiente pa
 
 ### Dashboard
 
-- Resumen de cotizaciones, aprobación, ingresos y clientes.
-- Gráfico de actividad semanal.
-- Estado visual de conversión.
-- Checklist de configuración del taller.
-- Indicadores de operación y actividad del taller.
+- Resumen de solicitudes abiertas, presupuesto y proveedores destacados.
+- Feed de actividad reciente con información pública de las solicitudes.
+- Acceso directo para publicar una solicitud.
+
+### Solicitudes
+
+- Busca solicitudes por título, descripción, ubicación, categoría y etiquetas.
+- Filtra por categoría y consulta el detalle, presupuesto, etiquetas e imágenes vinculadas.
+- Publica solicitudes con ubicación, presupuesto, categoría y etiquetas opcionales.
+- Envía una propuesta con precio y mensaje; el autor de la solicitud y cada proveedor pueden consultar las propuestas permitidas por RLS.
+- En **Mis solicitudes**, quien publicó puede cerrar o reabrir solicitudes, aceptar una propuesta (cierra la solicitud y marca las demás como no seleccionadas) o rechazar propuestas.
+- En el panel de Supabase configurado, las solicitudes abiertas se leen mediante la función pública `get_open_quote_requests`; el alta requiere una sesión autenticada.
+- Sin Supabase configurado, las solicitudes se guardan como datos locales de demostración.
 
 ### Cotizaciones
 
@@ -79,7 +87,7 @@ Desde **Ajustes** puedes editar los datos del taller, consultar la sección de i
 
 ### Admin principal
 
-La vista **Admin principal** es una consola separada para el administrador global de la plataforma. Muestra talleres registrados, cotizaciones globales, ingresos por anuncios y el estado de la plataforma. También incluye el punto de entrada para conectar Gmail.
+La vista **Admin principal** está reservada para el administrador global. Permite revisar los negocios conectados, activar o desactivar su aparición como destacados y editar categoría, descripción y orden. Las operaciones requieren sesión de administrador en Supabase y la migración de marketplace.
 
 La conexión real se hará con **Google OAuth desde Supabase Auth**. El navegador no debe recibir contraseñas ni refresh tokens. La cuenta, permisos y estado quedan registrados en `platform_admins` y `gmail_connections`, mientras el intercambio de tokens debe vivir en una Edge Function o Supabase Vault.
 
@@ -87,11 +95,15 @@ La conexión real se hará con **Google OAuth desde Supabase Auth**. El navegado
 
 El esquema inicial está en [supabase/schema.sql](supabase/schema.sql). Se ejecuta completo desde **Supabase Dashboard → SQL Editor → New query**.
 
+Para habilitar la lectura pública de solicitudes y las propuestas, ejecuta también [supabase/marketplace.sql](supabase/marketplace.sql) después de `schema.sql`. El esquema base crea `quote_requests` como una vista de compatibilidad sobre `solicitudes_cotizacion`; la migración adicional trabaja con la tabla real y no intenta crear índices sobre esa vista. Los destacados ya usan `negocios_destacados` y la función existente del esquema base. La pantalla de solicitudes muestra un aviso con opción de reintento si RPC, migración o permisos no están disponibles.
+
+En **Supabase → Authentication → URL Configuration**, agrega la URL local y el dominio de producción a las URLs de redirección para que los enlaces de recuperación de contraseña regresen a PACOTIZAR.
+
 La configuración del proyecto está en `.env.local` y el cliente de navegador en [src/lib/supabase.js](src/lib/supabase.js). Como este proyecto usa Vite, las variables usan el prefijo `VITE_`; las variables `NEXT_PUBLIC_` de una guía Next.js no se leen automáticamente aquí.
 
 El cliente Supabase persiste la sesión, refresca el token automáticamente y detecta retornos OAuth. No se usa middleware de Next porque este repositorio no tiene Next.js ni rutas server-side.
 
-Incluye:
+El esquema inicial incluye:
 
 - Perfiles, talleres y miembros del taller.
 - Clientes, vehículos, servicios y cotizaciones.
@@ -103,42 +115,49 @@ Incluye:
 
 ## Dónde está la lógica de cotización
 
-La lógica temporal del MVP está en [src/main.js](src/main.js):
+La lógica de cotización está separada por capas:
 
-- `renderModal()` construye el formulario y muestra presupuesto mínimo, máximo y notas.
-- `submitQuote()` valida el rango de presupuesto, calcula el total y guarda la cotización.
-- `renderSettings()` muestra la sección de monetización por anuncios.
+- [src/components/ModalCotizacion.js](src/components/ModalCotizacion.js) construye y valida el formulario, incluido el aviso si el total supera el presupuesto máximo.
+- [src/services/dataService.js](src/services/dataService.js) expone operaciones asíncronas para cotizaciones, clientes, servicios y perfil del taller.
+- [src/store/state.js](src/store/state.js) centraliza el estado reactivo y su persistencia temporal.
+- [src/router/router.js](src/router/router.js) coordina las rutas, vistas y eventos de la interfaz.
 
-Cuando conectemos Supabase, esta lógica se separará en servicios de datos, pero esos son los puntos actuales que controlan la experiencia.
+Los datos de cotizaciones, clientes y servicios del panel operativo todavía usan Store/localStorage. Las solicitudes publicadas y los proveedores destacados usan Supabase cuando está configurado; los datos de demostración locales solo se usan cuando Supabase no está configurado.
 
 ## Roles y permisos
 
-- **Dueño del local**: administra su taller y tiene control total de clientes, servicios, vehículos y cotizaciones.
+- **Proveedor (`owner`)**: administra la información y las ofertas de su negocio.
 - **Administrador del taller**: puede modificar y eliminar clientes, vehículos, servicios y cotizaciones de su taller.
-- **Asesor**: consulta clientes y servicios, y puede crear o actualizar cotizaciones según el flujo operativo.
+- **Colaborador (`advisor`)**: puede apoyar la gestión operativa según los permisos de su cuenta.
 - **Administrador principal**: controla la plataforma completa, talleres, feed, Gmail y reportes globales.
 
-Estos permisos se aplican en Supabase mediante `is_workshop_manager()` y las políticas RLS de [supabase/schema.sql](supabase/schema.sql).
+El acceso Supabase incluye registro, inicio de sesión, cierre de sesión desde el menú de cuenta y recuperación de contraseña por correo. El enlace de recuperación permite establecer y confirmar una contraseña nueva. Una sesión ausente se representa como visitante y no conserva permisos de proveedor. La UI protege la ruta de administrador principal, y las operaciones de destacados verifican además al administrador en Supabase. La autorización definitiva depende de las políticas RLS de [supabase/schema.sql](supabase/schema.sql) y [supabase/marketplace.sql](supabase/marketplace.sql).
 
 ## Feed de cotizaciones
 
-El dashboard muestra las cotizaciones más recientes en un feed anonimizado. No se publica el nombre, teléfono ni datos privados del cliente. El diálogo **¿Puedes ser tú el siguiente?** invita a crear la primera cotización para participar.
+El dashboard muestra actividad general en un feed anonimizado. No se publican nombres, notas, teléfonos, direcciones ni vehículos que puedan identificar al cliente; el diálogo **¿Puedes ser tú el siguiente?** invita a crear la primera cotización para participar.
 
 ## Persistencia de datos
 
-Este prototipo usa `localStorage` del navegador con la clave `cotizarapido-mvp`.
+La persistencia es híbrida durante esta etapa:
 
-- Los cambios permanecen al recargar la página.
-- Los datos no se comparten entre navegadores o dispositivos.
-- La interfaz inicia sin datos demo y usa `localStorage` únicamente como estado temporal mientras conectamos Supabase.
-- El SQL está preparado para usuarios reales, permisos, feed y sincronización con Supabase.
-- **Restablecer demo** elimina los cambios locales y vuelve a los datos iniciales.
+- Las sesiones se gestionan con Supabase Auth.
+- Las solicitudes abiertas y los negocios destacados se leen y escriben en Supabase cuando está configurado.
+- Cotizaciones, clientes y servicios del panel de taller siguen guardándose en `localStorage` (`cotizarapido-mvp`); también se pueden migrar datos desde la clave anterior `pacotizar-workspace-v2`.
+- Sin Supabase configurado, la app usa estado local de demostración.
+- **Restablecer demo** elimina el estado local y vuelve a los datos iniciales.
 
 ## Arquitectura actual
 
 ```text
 index.html          Entrada HTML y metadatos
-src/main.js         Estado, navegación, vistas y lógica de negocio del demo
+src/main.js         Carga estilos, registra el service worker e inicia el Router
+src/store/          Estado global reactivo y persistencia temporal
+src/router/         Navegación hash, guards por rol y coordinación de eventos
+src/services/       API asíncrona de datos (adaptador actual de localStorage)
+src/components/     Formularios, modales y feed anonimizado
+src/views/           Renderizado de Dashboard, Cotizaciones, Clientes, Servicios, Ajustes y Admin
+src/utils/            Formato, escape HTML e iconos compartidos
 src/style.css       Sistema visual responsive
 supabase/schema.sql Esquema PostgreSQL, RLS y monetización por anuncios
 public/             Archivos públicos estáticos
@@ -148,10 +167,9 @@ El proyecto conserva el stack ligero de Vite y JavaScript vanilla definido para 
 
 ## Qué falta para producción
 
-- Supabase Auth para registro e inicio de sesión.
-- Conectar las lecturas y escrituras del frontend con Supabase.
+- Aplicar y validar `schema.sql` y `marketplace.sql` en el proyecto Supabase de producción.
 - Crear automáticamente el taller y su primer miembro después del registro.
-- Migrar el feed local a `community_feed_posts`.
+- Persistir cotizaciones, clientes y servicios del panel operativo en Supabase.
 - Implementar edición y eliminación con confirmación y auditoría en la interfaz.
 - Servicio de WhatsApp para enviar cotizaciones.
 - Generación de PDF.
@@ -162,16 +180,16 @@ El proyecto conserva el stack ligero de Vite y JavaScript vanilla definido para 
 
 ## Flujo recomendado para probarlo
 
-1. Abre el dashboard y revisa las métricas.
-2. Entra en **Cotizaciones** y crea una nueva.
-3. Registra un presupuesto mínimo y máximo.
-4. Selecciona un servicio para comprobar el cálculo automático.
-5. Guarda la cotización y abre su detalle.
-6. Revisa que aparezcan el rango y las notas del presupuesto.
-7. Agrega un cliente desde **Clientes**.
-8. Cambia el nombre del taller desde **Ajustes**.
-9. Recarga la página para comprobar que los cambios persisten.
-10. Usa **Restablecer demo** para volver al estado inicial.
+1. Con Supabase configurado, aplica ambos archivos SQL y comprueba el inicio de sesión.
+2. Desde **Solicitudes**, prueba la búsqueda y el filtro por categoría.
+3. Publica una solicitud y revisa su detalle en el mercado.
+4. Usa **¿Olvidaste tu contraseña?** desde el acceso y valida el correo de restablecimiento.
+5. Entra en **Cotizaciones** y crea una cotización operativa.
+6. Registra un presupuesto mínimo y máximo, selecciona un servicio y comprueba el cálculo automático.
+7. Guarda la cotización y abre su detalle.
+8. Agrega un proveedor desde **Proveedores** y cambia el perfil desde **Ajustes**.
+9. Con administrador global, modifica un destacado desde **Admin principal**.
+10. Recarga la página para comprobar la persistencia y usa **Restablecer demo** para reiniciar los datos locales.
 
 ## Validación
 

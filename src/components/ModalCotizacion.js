@@ -1,0 +1,15 @@
+import { escapeHtml, formatMoney, icons } from '../utils/ui.js'
+
+export function validateQuoteForm({ amount, budgetMin, budgetMax }) {
+  if (budgetMin && budgetMax && budgetMin > budgetMax) return { error: 'El presupuesto mínimo no puede superar el máximo' }
+  if (!amount) return { error: 'Agrega al menos un servicio con precio' }
+  return { warning: Boolean(budgetMax && amount > budgetMax) }
+}
+
+export function renderQuoteLine(services) {
+  return `<div class="quote-line"><select name="service"><option value="">Selecciona un servicio</option>${services.map((service) => `<option value="${Number(service.price) || 0}">${escapeHtml(service.name)} · ${formatMoney(service.price)}</option>`).join('')}</select><input name="line-description" placeholder="Detalle opcional" /><input class="line-price" name="price" type="number" min="0" placeholder="Precio" required /></div>`
+}
+
+export function renderQuoteModal(services) {
+  return `<div class="modal-backdrop" data-action="backdrop-close"><section class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="quote-modal-title"><div class="modal-header"><div><span class="eyebrow">NUEVA COTIZACIÓN</span><h2 id="quote-modal-title">Arma una propuesta en minutos</h2></div><button class="close-button" data-action="close-modal" aria-label="Cerrar">×</button></div><form id="quote-form"><div class="form-section"><h3>1. Datos del cliente</h3><div class="form-grid"><label>Nombre completo<input name="customer" required placeholder="Ej. María Rodríguez" /></label><label>Teléfono / WhatsApp<input name="phone" placeholder="Ej. 310 555 0101" /></label><label>Vehículo<input name="vehicle" required placeholder="Ej. Mazda CX-5 2020" /></label><label>Placa<input name="plate" placeholder="ABC 123" /></label><label>Presupuesto mínimo<input name="budget-min" type="number" min="0" placeholder="Ej. 300000" /></label><label>Presupuesto máximo<input name="budget-max" type="number" min="0" placeholder="Ej. 500000" /></label><label class="wide-field">Notas del presupuesto<textarea name="budget-notes" rows="2" placeholder="Qué puede priorizar o ajustar el cliente"></textarea></label></div></div><div class="form-section"><div class="form-section-heading"><h3>2. Servicios</h3><button class="text-button" type="button" data-action="add-line">+ Agregar línea</button></div><div id="quote-lines">${renderQuoteLine(services)}</div></div><div class="quote-total"><span>Total estimado</span><strong id="quote-total-value">${formatMoney(0)}</strong></div><p id="quote-budget-warning" class="budget-warning status status-warning" role="alert" hidden style="display:none; margin:0 0 14px; padding:10px 12px; white-space:normal; line-height:1.5">El total supera el presupuesto máximo indicado. Revisa los servicios o confirma el ajuste con el cliente.</p><div class="modal-actions"><button class="secondary-button" type="button" data-action="close-modal">Cancelar</button><button class="primary-button" type="submit">Guardar cotización ${icons.arrow}</button></div></form></section></div>`
+}

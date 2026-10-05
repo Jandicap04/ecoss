@@ -1,0 +1,5 @@
+import { escapeHtml, formatMoney, icons } from '../utils/ui.js'
+
+export function renderServices({ services, canManage }) {
+  return `<section class="page-heading"><div><p class="eyebrow">CATÁLOGO / SERVICIOS</p><h1>Servicios y precios</h1><p class="heading-subtitle">Precios listos para cotizar en segundos.</p></div>${canManage ? `<button class="primary-button" data-action="new-service">${icons.plus}<span>Agregar servicio</span></button>` : ''}</section><section class="surface service-list"><div class="service-list-head"><div><h2>Catálogo activo</h2><p>${services.length} servicios disponibles para tu equipo.</p></div><div class="search-box small-search">${icons.search}<input placeholder="Buscar servicio" /></div></div>${services.map((service) => `<div class="service-row"><span class="service-icon">${icons.box}</span><span class="service-info"><b>${escapeHtml(service.name)}</b><small>${escapeHtml(service.category)} · Usado ${Number(service.used) || 0} veces</small></span><strong>${formatMoney(service.price)}</strong>${canManage ? '<button class="more-button" aria-label="Opciones del servicio">•••</button>' : ''}</div>`).join('')}</section>`
+}
