@@ -3,23 +3,20 @@ import * as dataService from '../services/dataService.js'
 import * as marketplaceService from '../services/marketplaceService.js'
 import { renderModal } from '../components/ModalGeneral.js'
 import { renderDashboard } from '../views/Dashboard.js'
-import { renderQuotes, renderQuoteRows } from '../views/Cotizaciones.js'
 import { renderClients, renderClientCards, filterProviders, sortProviders } from '../views/Clientes.js'
 import { renderServices } from '../views/Servicios.js'
 import { renderSettings } from '../views/Ajustes.js'
 import { renderAdminPrincipal } from '../views/AdminPrincipal.js'
 import { renderRequestCards, renderRequests } from '../views/Solicitudes.js'
 import { canManageWorkshop, escapeHtml, icons } from '../utils/ui.js'
-import { renderQuoteLine, validateQuoteForm } from '../components/ModalCotizacion.js'
-import { renderRequestModal, requestFromForm } from '../components/ModalSolicitud.js'
+import { renderRequestCategoryFields, renderRequestModal, requestFromForm } from '../components/ModalSolicitud.js'
 import { getSessionContext, requestPasswordReset, signIn, signOut, signUp, updatePassword } from '../services/authService.js'
 import { supabase } from '../lib/supabase.js'
 
 const routes = {
   dashboard: { title: 'Resumen', render: renderDashboard },
   requests: { title: 'Solicitudes', render: renderRequests },
-  quotes: { title: 'Cotizaciones', render: renderQuotes },
-  customers: { title: 'Clientes', render: renderClients },
+  customers: { title: 'Proveedores', render: renderClients },
   services: { title: 'Servicios', render: renderServices },
   settings: { title: 'Ajustes', render: renderSettings },
   admin: { title: 'Admin principal', render: renderAdminPrincipal },
@@ -29,7 +26,7 @@ const roleName = (role) => ({ administrator: 'Administrador principal', owner: '
 
 function routeFromHash() {
   const route = window.location.hash.replace(/^#\/?/, '').split('/')[0]
-  return routes[route] ? route : 'dashboard'
+  return routes[route] ? route : 'customers'
 }
 
 function navItem(view, icon, label, count, active) {
@@ -41,7 +38,7 @@ function renderShell(state, route, viewMarkup, modalMarkup, toast, accountMenuOp
   const displayName = profile.name || (state.role === 'administrator' ? 'Administrador principal' : 'Usuario del marketplace')
   const initials = profile.initials || displayName.trim().split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase()
   const allowSettings = canManageWorkshop(state.role)
-  const nav = `${navItem('dashboard', icons.grid, 'Resumen', 0, route)}${navItem('requests', icons.file, 'Solicitudes', state.quoteRequests.length, route)}${navItem('quotes', icons.file, 'Cotizaciones', state.quotes.length, route)}${navItem('customers', icons.users, 'Proveedores', 0, route)}${navItem('services', icons.box, 'Servicios', 0, route)}${allowSettings ? `<p class="nav-caption nav-caption-spaced">CONFIGURACIÓN</p>${navItem('settings', icons.gear, 'Ajustes', 0, route)}` : ''}${state.role === 'administrator' ? `<p class="nav-caption nav-caption-spaced">PLATAFORMA</p>${navItem('admin', icons.gear, 'Admin principal', 0, route)}` : ''}`
+  const nav = `${navItem('dashboard', icons.grid, 'Resumen', 0, route)}${navItem('requests', icons.file, 'Solicitudes', state.quoteRequests.length, route)}${navItem('customers', icons.users, 'Proveedores', 0, route)}${navItem('services', icons.box, 'Servicios', 0, route)}${allowSettings ? `<p class="nav-caption nav-caption-spaced">CONFIGURACIÓN</p>${navItem('settings', icons.gear, 'Ajustes', 0, route)}` : ''}${state.role === 'administrator' ? `<p class="nav-caption nav-caption-spaced">PLATAFORMA</p>${navItem('admin', icons.gear, 'Admin principal', 0, route)}` : ''}`
   return `<div class="app-shell"><div class="sidebar-backdrop ${sidebarOpen ? 'visible' : ''}" data-action="toggle-sidebar"></div><aside class="sidebar ${sidebarOpen ? 'open' : ''}" id="sidebar"><div class="brand"><span class="brand-logo-frame"><img src="/IMAGENES.png" alt="Pacotizar" /></span><span class="brand-word">PAC<span>OTIZAR</span></span></div><div class="workspace-switcher"><span class="avatar avatar-small">${escapeHtml(initials)}</span><span><b>${escapeHtml(profile.workshop || 'Mi negocio')}</b><small>Marketplace activo</small></span><span class="chevron">⌄</span></div><nav class="main-nav" aria-label="Navegación principal"><p class="nav-caption">OPERACIÓN</p>${nav}</nav><div class="sidebar-bottom"><div class="help-card"><span class="help-icon">?</span><div><b>¿Necesitas ayuda?</b><small>Habla con soporte</small></div><span class="help-arrow">${icons.arrow}</span></div><div class="user-line"><span class="avatar">${escapeHtml(initials)}</span><span><b>${escapeHtml(displayName)}</b><small>${escapeHtml(roleName(state.role))}</small></span>${state.user ? `<button class="icon-btn account-menu-trigger" data-action="account-menu" aria-expanded="${accountMenuOpen}" aria-label="Opciones de la cuenta">•••</button>` : ''}</div>${accountMenuOpen && state.user ? `<div class="account-menu" role="menu"><div class="account-menu-heading"><b>${escapeHtml(displayName)}</b><small>${escapeHtml(roleName(state.role))}</small></div><button type="button" role="menuitem" data-action="sign-out">Cerrar sesión</button></div>` : ''}</div></aside><main class="main-content"><header class="topbar"><button class="mobile-menu icon-btn" data-action="toggle-sidebar" aria-label="Abrir menú">${icons.menu}</button><div class="breadcrumb"><span>Workspace</span><i>/</i><b>${routes[route].title}</b></div><div class="top-actions"><button class="icon-btn theme-toggle" type="button" data-action="toggle-theme" aria-label="Activar modo ${theme === 'dark' ? 'claro' : 'oscuro'}" title="Cambiar a modo ${theme === 'dark' ? 'claro' : 'oscuro'}">${theme === 'dark' ? '☀' : '☾'}</button><button class="icon-btn notification-btn" data-action="notifications" aria-label="Notificaciones">${icons.bell}<span></span></button><div class="top-avatar avatar">${escapeHtml(initials)}</div></div></header><div class="page-content">${viewMarkup}</div></main></div>${modalMarkup}<div class="toast-region" aria-live="polite">${toast ? `<div class="toast toast-${escapeHtml(toast.tone)}">${toast.tone === 'error' ? icons.alert : icons.check}<span>${escapeHtml(toast.message)}</span></div>` : ''}</div>`
 }
 
@@ -112,8 +109,8 @@ export function createRouter(root = document.querySelector('#app')) {
 
     let route = routeFromHash()
     if (route === 'admin' && state.role !== 'administrator') {
-      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#/dashboard`)
-      route = 'dashboard'
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#/customers`)
+      route = 'customers'
       if (isStarted) {
         toast = { message: 'Acceso reservado al administrador principal', tone: 'error' }
         clearTimeout(toastTimer)
@@ -121,8 +118,8 @@ export function createRouter(root = document.querySelector('#app')) {
       }
     }
     if (route === 'settings' && !canManageWorkshop(state.role)) {
-      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#/dashboard`)
-      route = 'dashboard'
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#/customers`)
+      route = 'customers'
       if (isStarted) toast = { message: 'Tu rol no puede acceder a Ajustes', tone: 'error' }
     }
 
@@ -157,14 +154,13 @@ export function createRouter(root = document.querySelector('#app')) {
       }
     }
 
-    const [quotes, clients, services] = await Promise.all([dataService.getQuotes(), dataService.getClients(), dataService.getServices()])
+    const [clients, services] = await Promise.all([dataService.getClients(), dataService.getServices()])
     if (version !== renderVersion) return
     const currentState = getState()
     const providerList = route === 'customers' && currentState.featuredBusinesses.length ? currentState.featuredBusinesses : clients
     const viewMarkup = routes[route].render({
       state: currentState,
       role: currentState.role,
-      quotes,
       clients: providerList,
       services,
       businesses: adminBusinesses,
@@ -180,30 +176,6 @@ export function createRouter(root = document.querySelector('#app')) {
       requestOffers,
       requestOfferError,
     }), toast, accountMenuOpen, sidebarOpen, theme)
-  }
-
-  async function submitQuote(event) {
-    event.preventDefault()
-    const form = event.currentTarget
-    const data = new FormData(form)
-    const prices = [...form.querySelectorAll('.line-price')].map((input) => Number(input.value) || 0)
-    const amount = prices.reduce((sum, price) => sum + price, 0)
-    const budgetMin = Number(data.get('budget-min')) || null
-    const budgetMax = Number(data.get('budget-max')) || null
-    const validation = validateQuoteForm({ amount, budgetMin, budgetMax })
-    if (validation.error) {
-      notify(validation.error, 'error')
-      return
-    }
-    await dataService.createQuote({
-      customer: data.get('customer'), phone: data.get('phone') || '', vehicle: data.get('vehicle'), plate: data.get('plate') || '',
-      amount, budgetMin, budgetMax, budgetNotes: data.get('budget-notes') || '', status: 'draft', date: 'Ahora',
-      items: [...form.querySelectorAll('.line-price')].map((input) => input.closest('.quote-line').querySelector('select').selectedOptions[0]?.textContent.split(' · ')[0] || input.closest('.quote-line').querySelector('[name="line-description"]').value || 'Servicio personalizado'),
-    })
-    const exceededBudget = validation.warning
-    modal = null
-    notify(exceededBudget ? 'Cotización guardada. El total supera el presupuesto máximo.' : 'Cotización guardada como borrador', exceededBudget ? 'info' : 'success')
-    await render()
   }
 
   async function handleAction(action, element) {
@@ -223,25 +195,24 @@ export function createRouter(root = document.querySelector('#app')) {
         notify(error.message || 'No se pudo cerrar la sesión.', 'error')
         return
       }
-    } else if (action === 'new-quote') modal = { type: 'quote' }
-    else if (action === 'new-request') {
+    } else if (action === 'new-request') {
       const businessName = element.dataset.businessName || ''
       const businessCity = element.dataset.businessCity || ''
-      const businessCategory = element.dataset.businessCategory || ''
+      const businessCategory = element.dataset.businessCategory || element.dataset.exampleCategory || ''
       const businessDescription = element.dataset.businessDescription || ''
       modal = {
         type: 'request',
         prefill: {
-          title: businessName ? `Cotización para ${businessName}` : '',
+          title: businessName ? `Solicitud para ${businessName}` : '',
           description: businessDescription ? `Necesito información sobre ${businessName || 'este proveedor'} en ${businessCity || 'mi ciudad'}.\n\n${businessDescription}` : '',
           location: businessCity || '',
           category: businessCategory || '',
         },
       }
     }
+    else if (action === 'view-customers') window.location.hash = '/customers'
     else if (action === 'new-customer' && canManageWorkshop(state.role)) modal = { type: 'customer' }
     else if (action === 'new-service' && canManageWorkshop(state.role)) modal = { type: 'service' }
-    else if (action === 'quote-detail') modal = { type: 'detail', id: element.dataset.id }
     else if (action === 'business-detail') modal = { type: 'business', id: element.dataset.id }
     else if (action === 'request-detail') {
       modal = { type: 'request-detail', id: element.dataset.id }
@@ -320,18 +291,6 @@ export function createRouter(root = document.querySelector('#app')) {
     else if (action === 'delete-customer' && canManageWorkshop(state.role)) {
       await dataService.deleteClient(element.dataset.id || element.dataset.name)
       notify('Cliente eliminado', 'success')
-    } else if (action === 'send-quote') {
-      modal = null
-      notify('Cotización lista para enviar por WhatsApp', 'success')
-    } else if (action === 'duplicate-quote' && canManageWorkshop(state.role)) {
-      const quote = state.quotes.find((item) => item.id === element.dataset.id)
-      if (quote) await dataService.createQuote({ ...quote, id: undefined, status: 'draft', date: 'Ahora' })
-      modal = null
-      notify('Cotización duplicada como borrador', 'success')
-    } else if (action === 'add-line') {
-      const lines = root.querySelector('#quote-lines')
-      if (lines) lines.insertAdjacentHTML('beforeend', renderQuoteLine(state.services))
-      return
     } else if (action === 'save-settings' && canManageWorkshop(state.role)) {
       await dataService.updateWorkshopProfile({
         workshop: root.querySelector('#setting-workshop')?.value || state.profile.workshop,
@@ -351,11 +310,6 @@ export function createRouter(root = document.querySelector('#app')) {
   }
 
   function handleInput(event) {
-    if (event.target.matches('.line-price, [name="budget-max"]')) updateQuoteSummary(event.target.closest('#quote-form'))
-    if (event.target.id === 'quote-search') {
-      const query = event.target.value.toLocaleLowerCase()
-      root.querySelector('#all-quotes').innerHTML = renderQuoteRows(getState().quotes.filter((quote) => `${quote.customer} ${quote.vehicle}`.toLocaleLowerCase().includes(query)))
-    }
     if (event.target.id === 'customer-search' || event.target.id === 'customer-category' || event.target.id === 'customer-sort') {
       const query = root.querySelector('#customer-search')?.value || ''
       const category = root.querySelector('#customer-category')?.value || ''
@@ -381,18 +335,12 @@ export function createRouter(root = document.querySelector('#app')) {
     if (count) count.textContent = `${requests.length} ${requests.length === 1 ? 'solicitud' : 'solicitudes'}`
   }
 
-  function updateQuoteSummary(form) {
-    if (!form) return
-    const amount = [...form.querySelectorAll('.line-price')].reduce((sum, input) => sum + (Number(input.value) || 0), 0)
-    const maximum = Number(form.elements.namedItem('budget-max').value) || null
-    const exceeded = Boolean(maximum && amount > maximum)
-    const warning = form.querySelector('#quote-budget-warning')
-    warning.hidden = !exceeded
-    warning.style.display = exceeded ? 'block' : 'none'
-    form.querySelector('#quote-total-value').textContent = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(amount).replace('\u00a0', ' ')
-  }
-
   function handleChange(event) {
+    if (event.target.matches('[name="category"][data-category-select]')) {
+      const fields = root.querySelector('[data-category-fields]')
+      if (fields) fields.innerHTML = renderRequestCategoryFields(event.target.value)
+      return
+    }
     if (event.target.id === 'request-category') {
       filterRequests()
       return
@@ -406,16 +354,9 @@ export function createRouter(root = document.querySelector('#app')) {
       root.querySelector('.customer-grid').innerHTML = renderClientCards(providers, canManageWorkshop(getState().role))
       return
     }
-    if (!event.target.matches('select[name="service"]')) return
-    const line = event.target.closest('.quote-line')
-    const priceInput = line?.querySelector('.line-price')
-    if (!priceInput) return
-    priceInput.value = event.target.value
-    updateQuoteSummary(event.target.closest('#quote-form'))
   }
 
   function handleSubmit(event) {
-    if (event.target.id === 'quote-form') void submitQuote(event)
     if (event.target.id === 'auth-form') {
       event.preventDefault()
       const form = event.target
@@ -528,9 +469,9 @@ export function createRouter(root = document.querySelector('#app')) {
     if (event.target.id === 'customer-form') {
       event.preventDefault()
       const data = new FormData(event.target)
-      void dataService.createClient({ name: data.get('name'), phone: data.get('phone') || 'Sin teléfono', vehicle: data.get('vehicle') || 'Vehículo pendiente', visits: 0, value: 0 }).then(() => {
+      void dataService.createClient({ name: data.get('name'), phone: data.get('phone') || 'Sin teléfono', visits: 0, value: 0 }).then(() => {
         modal = null
-        notify('Cliente agregado correctamente', 'success')
+        notify('Proveedor agregado correctamente', 'success')
         render()
       })
     }
@@ -597,7 +538,7 @@ export function createRouter(root = document.querySelector('#app')) {
         }
       })
     }
-    if (!window.location.hash) window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#/dashboard`)
+    if (!window.location.hash) window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#/customers`)
     window.addEventListener('hashchange', render)
     root.addEventListener('click', handleClick)
     root.addEventListener('input', handleInput)
